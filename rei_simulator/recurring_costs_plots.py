@@ -58,10 +58,10 @@ def plot_monthly_costs_over_time(schedule: RecurringCostSchedule, ax=None) -> Fi
 
     ax.fill_between(years, df["monthly_with_reserves"], alpha=0.3, color="#9b59b6")
     ax.plot(years, df["monthly_with_reserves"], color="#9b59b6", linewidth=2,
-            label="Monthly (with CapEx reserves)")
+            label="Monthly Total")
 
     ax.plot(years, df["monthly_recurring"], color="#f39c12", linewidth=2,
-            linestyle="--", label="Monthly (recurring only)")
+            linestyle="--", label="Monthly Recurring")
 
     style_axis(ax, "Monthly Cost Projection", "Year", "Monthly Cost ($)")
     ax.legend(facecolor="#2b2b2b", labelcolor="white")
@@ -138,99 +138,6 @@ def plot_category_pie_chart(schedule: RecurringCostSchedule, ax=None) -> Figure:
 
     ax.set_title(f"Total Costs by Category ({schedule.params.analysis_years} Years)",
                 color="white", fontsize=12, fontweight="bold")
-
-    return fig
-
-
-def plot_capex_timeline(schedule: RecurringCostSchedule, ax=None) -> Figure:
-    """
-    Plot CapEx events and reserves over time.
-
-    Shows when major replacements are expected and reserve accumulation.
-    """
-    df = schedule.schedule
-
-    if ax is None:
-        fig = create_figure()
-        ax = fig.add_subplot(111)
-    else:
-        fig = ax.get_figure()
-
-    years = df["year"]
-
-    # Plot reserves line
-    ax.plot(years, df["capex_reserve"], color="#3498db", linewidth=2,
-            label="Annual CapEx Reserve")
-
-    # Plot replacement events as bars
-    if df["capex_events"].sum() > 0:
-        events = df[df["capex_events"] > 0]
-        ax.bar(events["year"], events["capex_events"], color="#e74c3c",
-               alpha=0.7, label="Replacement Events")
-
-    style_axis(ax, "Capital Expenditure Timeline", "Year", "Amount ($)")
-    ax.legend(facecolor="#2b2b2b", labelcolor="white")
-    ax.yaxis.set_major_formatter(CURRENCY_FORMATTER)
-
-    return fig
-
-
-def plot_capex_items_breakdown(params: PropertyCostParameters, ax=None) -> Figure:
-    """
-    Horizontal bar chart showing CapEx items and their annual reserve amounts.
-    """
-    if ax is None:
-        fig = create_figure(figsize=(10, 8))
-        ax = fig.add_subplot(111)
-    else:
-        fig = ax.get_figure()
-
-    if not params.capex_items:
-        ax.text(0.5, 0.5, "No CapEx items defined", ha="center", va="center",
-                transform=ax.transAxes, color="white", fontsize=14)
-        return fig
-
-    # Sort by annual reserve
-    items = sorted(params.capex_items, key=lambda x: x.annual_reserve, reverse=True)
-
-    names = [item.name for item in items]
-    reserves = [item.annual_reserve for item in items]
-    years_left = [item.years_until_replacement for item in items]
-
-    y_pos = np.arange(len(names))
-
-    # Color by urgency (years until replacement)
-    colors = []
-    for y in years_left:
-        if y <= 2:
-            colors.append("#e74c3c")  # Red - urgent
-        elif y <= 5:
-            colors.append("#f39c12")  # Orange - soon
-        else:
-            colors.append("#2ecc71")  # Green - okay
-
-    bars = ax.barh(y_pos, reserves, color=colors, alpha=0.8)
-
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(names, color="white")
-
-    # Add years until replacement labels
-    for i, (bar, years) in enumerate(zip(bars, years_left)):
-        ax.text(bar.get_width() + 50, bar.get_y() + bar.get_height()/2,
-                f"{years}yr", va="center", color="white", fontsize=9)
-
-    style_axis(ax, "CapEx Items - Annual Reserve (colored by urgency)", "Annual Reserve ($)", "")
-    ax.xaxis.set_major_formatter(CURRENCY_FORMATTER)
-
-    # Add legend for colors
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor="#e74c3c", label="Urgent (≤2 years)"),
-        Patch(facecolor="#f39c12", label="Soon (3-5 years)"),
-        Patch(facecolor="#2ecc71", label="Okay (>5 years)"),
-    ]
-    ax.legend(handles=legend_elements, loc="lower right",
-             facecolor="#2b2b2b", labelcolor="white")
 
     return fig
 
@@ -358,8 +265,8 @@ def plot_recurring_costs_summary(schedule: RecurringCostSchedule) -> Figure:
 
     plot_monthly_costs_over_time(schedule, ax1)
     plot_costs_by_category(schedule, ax2)
-    plot_capex_timeline(schedule, ax3)
-    plot_cumulative_costs(schedule, ax4)
+    plot_cumulative_costs(schedule, ax3)
+    plot_category_pie_chart(schedule, ax4)
 
     fig.tight_layout(pad=2.0)
 
@@ -372,7 +279,6 @@ def plot_true_cost_waterfall(
     insurance: float,
     maintenance: float,
     utilities: float,
-    capex_reserve: float,
     other: float = 0,
     ax=None
 ) -> Figure:
@@ -385,8 +291,8 @@ def plot_true_cost_waterfall(
     else:
         fig = ax.get_figure()
 
-    categories = ["P&I", "Taxes", "Insurance", "Maintenance", "Utilities", "CapEx Reserve"]
-    values = [mortgage_pi, taxes, insurance, maintenance, utilities, capex_reserve]
+    categories = ["P&I", "Taxes", "Insurance", "Maintenance", "Utilities"]
+    values = [mortgage_pi, taxes, insurance, maintenance, utilities]
     if other > 0:
         categories.append("Other")
         values.append(other)

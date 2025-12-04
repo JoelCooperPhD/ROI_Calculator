@@ -49,7 +49,6 @@ class InvestmentParameters:
 
     # Operating costs from Recurring Costs tab (single source of truth)
     maintenance_annual: float = 0.0
-    capex_annual: float = 0.0
     utilities_annual: float = 0.0
 
     # Investment Summary specific inputs
@@ -82,7 +81,6 @@ class InvestmentParameters:
             self.hoa_annual +
             self.pmi_annual +
             self.maintenance_annual +
-            self.capex_annual +
             self.utilities_annual
         )
 
@@ -378,7 +376,11 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         operating_costs = params.annual_operating_costs * cost_inflation
 
         # Mortgage payment (P&I only, operating costs separate)
-        mortgage_payment = params.monthly_pi_payment * 12
+        # If loan is paid off (balance is 0), no more mortgage payments
+        if loan_balance > 0:
+            mortgage_payment = params.monthly_pi_payment * 12
+        else:
+            mortgage_payment = 0
 
         # Total expenses (management_cost already subtracted in net_rental_income)
         total_expenses = mortgage_payment + operating_costs

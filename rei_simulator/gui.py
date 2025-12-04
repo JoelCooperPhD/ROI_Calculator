@@ -16,6 +16,7 @@ from .asset_building_gui import AssetBuildingTab
 from .investment_summary_gui import InvestmentSummaryTab
 from . import config
 from .validation import safe_float, safe_int, safe_positive_float, safe_positive_int, safe_percent
+from . import summary_report
 
 
 class AmortizationTab(ctk.CTkFrame):
@@ -128,13 +129,21 @@ class AmortizationTab(ctk.CTkFrame):
         )
         self.frequency_menu.pack(side="left")
 
-        # Additional costs section
+        # Recurring ownership costs section
         section_label2 = ctk.CTkLabel(
             self.input_frame,
-            text="Additional Costs",
+            text="Recurring Ownership Costs",
             font=ctk.CTkFont(size=14, weight="bold")
         )
         section_label2.pack(anchor="w", pady=(20, 5))
+
+        ownership_note = ctk.CTkLabel(
+            self.input_frame,
+            text="(These flow to Recurring Costs tab for projections)",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        ownership_note.pack(anchor="w")
 
         self.property_tax_entry = LabeledEntry(
             self.input_frame, "Property Tax Rate (%):", "1.2"
@@ -146,28 +155,52 @@ class AmortizationTab(ctk.CTkFrame):
         )
         self.insurance_entry.pack(fill="x", pady=5)
 
+        self.hoa_entry = LabeledEntry(
+            self.input_frame, "Monthly HOA ($):", "0"
+        )
+        self.hoa_entry.pack(fill="x", pady=5)
+
+        # Loan-specific costs section
+        section_label3 = ctk.CTkLabel(
+            self.input_frame,
+            text="Loan-Specific Costs",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        section_label3.pack(anchor="w", pady=(20, 5))
+
         self.pmi_rate_entry = LabeledEntry(
             self.input_frame, "PMI Rate (%):", "0.5"
         )
         self.pmi_rate_entry.pack(fill="x", pady=5)
 
-        self.hoa_entry = LabeledEntry(
-            self.input_frame, "Monthly HOA ($):", "0"
+        pmi_note = ctk.CTkLabel(
+            self.input_frame,
+            text="(Applied when LTV > 80%)",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
         )
-        self.hoa_entry.pack(fill="x", pady=5)
+        pmi_note.pack(anchor="w", padx=(190, 0))
 
         self.closing_costs_entry = LabeledEntry(
             self.input_frame, "Closing Costs ($):", "8000"
         )
         self.closing_costs_entry.pack(fill="x", pady=5)
 
+        closing_note = ctk.CTkLabel(
+            self.input_frame,
+            text="(One-time purchase expense)",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        closing_note.pack(anchor="w", padx=(190, 0))
+
         # Extra payments section
-        section_label3 = ctk.CTkLabel(
+        section_label4 = ctk.CTkLabel(
             self.input_frame,
             text="Extra Payments",
             font=ctk.CTkFont(size=14, weight="bold")
         )
-        section_label3.pack(anchor="w", pady=(20, 5))
+        section_label4.pack(anchor="w", pady=(20, 5))
 
         self.extra_payment_entry = LabeledEntry(
             self.input_frame, "Extra Monthly Payment ($):", "0"
@@ -534,6 +567,19 @@ class MainApplication(ctk.CTk):
         )
         self.calculate_btn.pack(side="left", padx=10)
 
+        # Export Summary button
+        self.export_btn = ctk.CTkButton(
+            self.button_frame,
+            text="Export Summary",
+            command=self._export_summary,
+            height=50,
+            width=150,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#3498db",
+            hover_color="#2980b9",
+        )
+        self.export_btn.pack(side="left", padx=10)
+
         # Status label
         self.status_label = ctk.CTkLabel(
             self.button_frame,
@@ -582,7 +628,9 @@ class MainApplication(ctk.CTk):
         # Close all matplotlib figures to free resources
         plt.close('all')
 
-        # Destroy the window and quit
+        # Quit the mainloop first, then destroy
+        # This prevents "after" callback errors from matplotlib's TkAgg backend
+        self.quit()
         self.destroy()
 
     def _load_all_config(self):
@@ -657,7 +705,6 @@ class MainApplication(ctk.CTk):
             # Pass operating costs from Recurring Costs tab
             self.asset_building_tab.set_operating_costs(
                 maintenance_annual=operating_costs["maintenance_annual"],
-                capex_annual=operating_costs["capex_annual"],
                 utilities_annual=operating_costs["utilities_annual"],
             )
             self.asset_building_tab.calculate()
@@ -690,7 +737,6 @@ class MainApplication(ctk.CTk):
                 vacancy_rate=asset_params["vacancy_rate"],
                 management_rate=asset_params["management_rate"],
                 maintenance_annual=asset_params["maintenance_annual"],
-                capex_annual=asset_params["capex_annual"],
                 utilities_annual=asset_params["utilities_annual"],
             )
 
@@ -721,6 +767,84 @@ class MainApplication(ctk.CTk):
         except Exception as e:
             self.status_label.configure(
                 text=f"Error: {str(e)[:50]}...",
+                text_color="#e74c3c"
+            )
+
+    def _export_summary(self):
+        """Export a comprehensive HTML summary report."""
+        # Check if calculations have been run
+        if (self.amortization_tab.schedule is None or
+            self.investment_summary_tab.summary is None):
+            self.status_label.configure(
+                text="Please run Calculate All before exporting",
+                text_color="#e74c3c"
+            )
+            return
+
+        try:
+            # Gather all data from tabs
+            loan_params = self.amortization_tab.get_loan_params()
+            operating_costs = self.recurring_costs_tab.get_operating_costs()
+            asset_params = self.asset_building_tab.get_asset_building_params()
+            reno_params = self.amortization_tab.get_renovation_params()
+
+            # Build ReportData
+            data = summary_report.ReportData(
+                # Core parameters
+                property_value=loan_params.property_value,
+                purchase_price=loan_params.purchase_price,
+                down_payment=loan_params.down_payment,
+                closing_costs=loan_params.closing_costs,
+                loan_amount=loan_params.principal,
+                interest_rate=loan_params.annual_interest_rate * 100,  # Convert to %
+                loan_term_years=loan_params.loan_term_years,
+
+                # Recurring ownership costs
+                property_tax_rate=loan_params.property_tax_rate,
+                insurance_annual=loan_params.insurance_annual,
+                hoa_monthly=loan_params.hoa_monthly,
+                pmi_rate=loan_params.pmi_rate,
+
+                # Operating costs
+                maintenance_annual=operating_costs["maintenance_annual"],
+                utilities_annual=operating_costs["utilities_annual"],
+
+                # Rental parameters
+                monthly_rent=asset_params["monthly_rent"],
+                vacancy_rate=asset_params["vacancy_rate"],
+                management_rate=asset_params["management_rate"],
+
+                # Appreciation
+                appreciation_rate=asset_params["appreciation_rate"],
+
+                # Holding period
+                holding_years=self.investment_summary_tab.get_holding_years(),
+
+                # Analysis mode
+                is_existing_property=self.amortization_tab.is_existing_property_mode(),
+
+                # Renovation
+                has_renovation=reno_params["enabled"],
+                renovation_cost=reno_params["cost"] if reno_params["enabled"] else 0.0,
+
+                # Calculated results
+                amortization=self.amortization_tab.schedule,
+                recurring_costs=self.recurring_costs_tab.schedule,
+                asset_building=self.asset_building_tab.schedule,
+                investment_summary=self.investment_summary_tab.summary,
+            )
+
+            # Generate and open report
+            filepath = summary_report.save_and_open_report(data)
+
+            self.status_label.configure(
+                text=f"Summary exported and opened in browser",
+                text_color="#3498db"
+            )
+
+        except Exception as e:
+            self.status_label.configure(
+                text=f"Export error: {str(e)[:50]}...",
                 text_color="#e74c3c"
             )
 

@@ -107,7 +107,6 @@ class AssetBuildingParameters:
     hoa_annual: float = 0.0
     maintenance_annual: float = 0.0
     utilities_annual: float = 0.0  # For owner-occupied or included in rent
-    capex_reserve_annual: float = 0.0
     other_costs_annual: float = 0.0
 
     # Cost inflation
@@ -152,7 +151,6 @@ class AssetBuildingParameters:
             self.hoa_annual +
             self.maintenance_annual +
             self.utilities_annual +
-            self.capex_reserve_annual +
             self.other_costs_annual
         )
 
@@ -293,6 +291,10 @@ def generate_amortization_for_asset(
         cumulative_principal += year_principal
         cumulative_interest += year_interest
 
+        # Annual payment is 0 if loan is paid off (balance was 0 at start of year)
+        # We track this by checking if any principal was paid this year
+        annual_payment = payment * 12 if year_principal > 0 or year_interest > 0 else 0
+
         records.append({
             "year": year,
             "principal_paid": year_principal,
@@ -300,7 +302,7 @@ def generate_amortization_for_asset(
             "cumulative_principal": cumulative_principal,
             "cumulative_interest": cumulative_interest,
             "ending_balance": balance,
-            "annual_payment": payment * 12,
+            "annual_payment": annual_payment,
         })
 
     return pd.DataFrame(records)

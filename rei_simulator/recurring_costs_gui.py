@@ -12,14 +12,14 @@ from .recurring_costs import (
     RecurringCostSchedule,
 )
 from . import recurring_costs_plots as rc_plots
-from .validation import safe_float, safe_int, safe_positive_float, safe_positive_int, safe_percent
+from .validation import safe_positive_float, safe_percent
 
 
 class RecurringCostsTab(ctk.CTkFrame):
     """Tab for recurring costs calculations and visualizations.
 
     Receives loan-related data from Amortization tab, only asks for
-    costs unique to this analysis (utilities, maintenance %, CapEx).
+    costs unique to this analysis (utilities, maintenance %).
     """
 
     def __init__(self, master, **kwargs):
@@ -91,14 +91,6 @@ class RecurringCostsTab(ctk.CTkFrame):
         )
         info.pack(pady=(0, 15))
 
-        # Property Age (unique to this tab - affects CapEx)
-        self._create_section_header("Property Details")
-
-        self.property_age_entry = LabeledEntry(
-            self.input_frame, "Property Age (years):", "10"
-        )
-        self.property_age_entry.pack(fill="x", pady=5)
-
         # Maintenance section (unique to this tab)
         self._create_section_header("Maintenance & Repairs")
 
@@ -109,7 +101,7 @@ class RecurringCostsTab(ctk.CTkFrame):
 
         maint_note = ctk.CTkLabel(
             self.input_frame,
-            text="(% of property value, 1% rule of thumb)",
+            text="(% of property value)",
             font=ctk.CTkFont(size=10),
             text_color="gray"
         )
@@ -143,17 +135,6 @@ class RecurringCostsTab(ctk.CTkFrame):
         )
         self.internet_entry.pack(fill="x", pady=5)
 
-        # CapEx section (unique to this tab)
-        self._create_section_header("Capital Expenditures")
-
-        self.use_default_capex_var = ctk.BooleanVar(value=True)
-        self.capex_checkbox = ctk.CTkCheckBox(
-            self.input_frame,
-            text="Include default CapEx items\n(roof, HVAC, appliances, etc.)",
-            variable=self.use_default_capex_var
-        )
-        self.capex_checkbox.pack(anchor="w", pady=5)
-
 
     def _create_section_header(self, text: str):
         """Create a section header label."""
@@ -178,9 +159,8 @@ class RecurringCostsTab(ctk.CTkFrame):
             select_frame,
             variable=self.plot_var,
             values=[
-                "True Cost Waterfall",     # What's my REAL monthly cost?
-                "CapEx Items Breakdown",   # What needs replacing soon?
-                "Costs by Category",       # What's driving my costs?
+                "True Cost Waterfall",
+                "Costs by Category",
             ],
             command=self._update_plot,
             width=200
@@ -200,7 +180,6 @@ class RecurringCostsTab(ctk.CTkFrame):
     def _get_params(self) -> PropertyCostParameters:
         """Build parameters using data from Amortization tab + local inputs."""
         # Use safe parsing for all inputs
-        property_age = safe_positive_int(self.property_age_entry.get(), 10, max_val=200)
         maintenance_pct = safe_percent(self.maintenance_pct_entry.get(), 0.01)  # default 1%
 
         # Default inflation rate for cost projections (each item can override)
@@ -208,7 +187,6 @@ class RecurringCostsTab(ctk.CTkFrame):
 
         params = PropertyCostParameters(
             property_value=self._property_value,
-            property_age_years=property_age,
             analysis_years=self._loan_term_years,
             general_inflation_rate=default_inflation,
             maintenance_percent=maintenance_pct,
@@ -287,10 +265,6 @@ class RecurringCostsTab(ctk.CTkFrame):
 
         params.recurring_costs = recurring_costs
 
-        # CapEx items
-        if self.use_default_capex_var.get():
-            params.add_default_capex_items()
-
         return params
 
     def calculate(self):
@@ -327,10 +301,6 @@ class RecurringCostsTab(ctk.CTkFrame):
 
         if plot_type == "True Cost Waterfall":
             fig = self._create_waterfall_plot()
-        elif plot_type == "CapEx Items Breakdown":
-            if self.params is None:
-                return
-            fig = rc_plots.plot_capex_items_breakdown(self.params)
         elif plot_type == "Costs by Category":
             fig = rc_plots.plot_costs_by_category(self.schedule)
         else:
@@ -376,40 +346,33 @@ class RecurringCostsTab(ctk.CTkFrame):
             elif item.category == CostCategory.HOA:
                 hoa += monthly
 
-        capex_reserve = year_1["capex_reserve"] / 12
-
         return rc_plots.plot_true_cost_waterfall(
             mortgage_pi=0,  # Not included in this tab
             taxes=taxes,
             insurance=insurance,
             maintenance=maintenance,
             utilities=utilities,
-            capex_reserve=capex_reserve,
             other=hoa,
         )
 
     def load_config(self, cfg: dict) -> None:
         """Load field values from config."""
-        self.property_age_entry.set(cfg.get("property_age", "10"))
         self.maintenance_pct_entry.set(cfg.get("maintenance_pct", "1.0"))
         self.electricity_entry.set(cfg.get("electricity", "1800"))
         self.gas_entry.set(cfg.get("gas", "1200"))
         self.water_entry.set(cfg.get("water", "720"))
         self.trash_entry.set(cfg.get("trash", "300"))
         self.internet_entry.set(cfg.get("internet", "900"))
-        self.use_default_capex_var.set(cfg.get("use_default_capex", True))
 
     def save_config(self) -> dict:
         """Save current field values to config dict."""
         return {
-            "property_age": self.property_age_entry.get(),
             "maintenance_pct": self.maintenance_pct_entry.get(),
             "electricity": self.electricity_entry.get(),
             "gas": self.gas_entry.get(),
             "water": self.water_entry.get(),
             "trash": self.trash_entry.get(),
             "internet": self.internet_entry.get(),
-            "use_default_capex": self.use_default_capex_var.get(),
         }
 
     def get_operating_costs(self) -> dict:
@@ -417,16 +380,11 @@ class RecurringCostsTab(ctk.CTkFrame):
 
         Returns annual costs calculated from this tab's detailed inputs.
         This makes Recurring Costs the single source of truth for operating costs.
-
-        Note: Cost inflation is NOT returned here. The Investment Summary assumes
-        rent growth roughly matches cost inflation, making the comparison to
-        stock investments fairer (both in nominal terms).
         """
         if self.params is None or self.schedule is None:
             # Return defaults if not yet calculated
             return {
                 "maintenance_annual": 0.0,
-                "capex_annual": 0.0,
                 "utilities_annual": 0.0,
             }
 
@@ -440,11 +398,7 @@ class RecurringCostsTab(ctk.CTkFrame):
             elif item.category == CostCategory.UTILITIES:
                 utilities_annual += item.annual_amount
 
-        # Calculate CapEx reserve from detailed items
-        capex_annual = sum(item.annual_reserve for item in self.params.capex_items)
-
         return {
             "maintenance_annual": maintenance_annual,
-            "capex_annual": capex_annual,
             "utilities_annual": utilities_annual,
         }

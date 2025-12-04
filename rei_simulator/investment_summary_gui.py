@@ -52,7 +52,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
 
         # Operating costs from Recurring Costs tab (single source of truth)
         self._maintenance_annual: float = 0
-        self._capex_annual: float = 0
         self._utilities_annual: float = 0
 
         # Renovation parameters from Amortization tab
@@ -117,12 +116,11 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         vacancy_rate: float,
         management_rate: float,
         maintenance_annual: float,
-        capex_annual: float,
         utilities_annual: float,
     ):
         """Set asset building parameters from the Asset Building tab.
 
-        Operating costs (maintenance, capex, utilities) originate from Recurring Costs tab.
+        Operating costs (maintenance, utilities) originate from Recurring Costs tab.
         """
         self._appreciation_rate = appreciation_rate
         self._monthly_rent = monthly_rent
@@ -131,7 +129,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self._management_rate = management_rate
         # Operating costs from Recurring Costs tab (single source of truth)
         self._maintenance_annual = maintenance_annual
-        self._capex_annual = capex_annual
         self._utilities_annual = utilities_annual
 
     def set_analysis_mode(self, is_existing_property: bool):
@@ -505,7 +502,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             management_rate=self._management_rate,
             # Operating costs from Recurring Costs tab (single source of truth)
             maintenance_annual=self._maintenance_annual,
-            capex_annual=self._capex_annual,
             utilities_annual=self._utilities_annual,
             # This tab's inputs - use safe parsing
             holding_period_years=self.holding_period_var.get(),
@@ -634,3 +630,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             "sp500_return": self.alternative_return_entry.get(),
             "initial_reserves": self.initial_reserves_entry.get(),
         }
+
+    def get_holding_years(self) -> int:
+        """Get the current holding period in years."""
+        return self.holding_period_var.get()

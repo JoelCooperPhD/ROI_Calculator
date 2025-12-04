@@ -38,14 +38,12 @@ def get_default_config() -> dict[str, Any]:
         },
         # Recurring Costs tab
         "recurring_costs": {
-            "property_age": "10",
             "maintenance_pct": "1.0",
             "electricity": "1800",
             "gas": "1200",
             "water": "720",
             "trash": "300",
             "internet": "900",
-            "use_default_capex": True,
         },
         # Asset Building tab
         "asset_building": {

@@ -40,7 +40,6 @@ class AssetBuildingTab(ctk.CTkFrame):
 
         # Operating costs from Recurring Costs tab (single source of truth)
         self._maintenance_annual: float = 0
-        self._capex_annual: float = 0
         self._utilities_annual: float = 0
 
         # Create main layout - left inputs, right plots
@@ -90,7 +89,6 @@ class AssetBuildingTab(ctk.CTkFrame):
     def set_operating_costs(
         self,
         maintenance_annual: float,
-        capex_annual: float,
         utilities_annual: float,
     ):
         """Set operating costs from the Recurring Costs tab.
@@ -98,7 +96,6 @@ class AssetBuildingTab(ctk.CTkFrame):
         This makes Recurring Costs the single source of truth for these values.
         """
         self._maintenance_annual = maintenance_annual
-        self._capex_annual = capex_annual
         self._utilities_annual = utilities_annual
 
     def _create_input_form(self):
@@ -275,7 +272,6 @@ class AssetBuildingTab(ctk.CTkFrame):
             # Operating costs from Recurring Costs tab (single source of truth)
             maintenance_annual=self._maintenance_annual,
             utilities_annual=self._utilities_annual,
-            capex_reserve_annual=self._capex_annual,
             # No cost inflation - assumes rent growth covers cost increases
             cost_inflation_rate=0.0,
             marginal_tax_rate=safe_percent(self.tax_rate_entry.get(), 0.0),
@@ -304,7 +300,6 @@ class AssetBuildingTab(ctk.CTkFrame):
             "management_rate": safe_percent(self.management_rate_entry.get(), 0.0),
             # Operating costs from Recurring Costs tab (single source of truth)
             "maintenance_annual": self._maintenance_annual,
-            "capex_annual": self._capex_annual,
             "utilities_annual": self._utilities_annual,
         }
 

@@ -14,7 +14,6 @@ class CostCategory(Enum):
     HOA = "HOA & Community"
     MANAGEMENT = "Property Management"
     VACANCY = "Vacancy Reserve"
-    CAPEX = "Capital Expenditures"
     OTHER = "Other"
 
 
@@ -35,38 +34,6 @@ class RecurringCostItem:
     def monthly_amount(self) -> float:
         """Monthly cost at year 0."""
         return self.annual_amount / 12
-
-
-@dataclass
-class CapExItem:
-    """Capital expenditure item with replacement schedule."""
-    name: str
-    replacement_cost: float
-    lifespan_years: int
-    current_age_years: int = 0
-    inflation_rate: float = 0.03
-    description: str = ""
-
-    @property
-    def annual_reserve(self) -> float:
-        """Annual amount to reserve for this item."""
-        if self.lifespan_years <= 0:
-            return 0
-        return self.replacement_cost / self.lifespan_years
-
-    @property
-    def monthly_reserve(self) -> float:
-        """Monthly reserve amount."""
-        return self.annual_reserve / 12
-
-    @property
-    def years_until_replacement(self) -> int:
-        """Years until next replacement needed."""
-        return max(0, self.lifespan_years - self.current_age_years)
-
-    def replacement_cost_at_year(self, year: int) -> float:
-        """Replacement cost adjusted for inflation at given year."""
-        return self.replacement_cost * (1 + self.inflation_rate) ** year
 
 
 @dataclass
@@ -142,15 +109,11 @@ class ClosingCosts:
 class PropertyCostParameters:
     """Complete parameters for property cost analysis."""
     property_value: float
-    property_age_years: int = 0
     analysis_years: int = 30
     general_inflation_rate: float = 0.03
 
     # Recurring costs
     recurring_costs: list[RecurringCostItem] = field(default_factory=list)
-
-    # Capital expenditures
-    capex_items: list[CapExItem] = field(default_factory=list)
 
     # Closing costs
     closing_costs: ClosingCosts = field(default_factory=ClosingCosts)
@@ -215,37 +178,6 @@ class PropertyCostParameters:
 
         self.recurring_costs = defaults
 
-    def add_default_capex_items(self):
-        """Add typical capital expenditure items."""
-        pv = self.property_value
-
-        self.capex_items = [
-            CapExItem("Roof", pv * 0.03, 25, self.property_age_years % 25,
-                     description="Full roof replacement"),
-            CapExItem("HVAC System", 8000, 15, self.property_age_years % 15,
-                     description="Heating and cooling system"),
-            CapExItem("Water Heater", 1500, 12, self.property_age_years % 12,
-                     description="Hot water heater replacement"),
-            CapExItem("Appliances", 5000, 15, self.property_age_years % 15,
-                     description="Major appliances replacement"),
-            CapExItem("Flooring", pv * 0.02, 20, self.property_age_years % 20,
-                     description="Carpet, hardwood, tile replacement"),
-            CapExItem("Interior Paint", pv * 0.01, 7, self.property_age_years % 7,
-                     description="Full interior repaint"),
-            CapExItem("Exterior Paint", pv * 0.015, 10, self.property_age_years % 10,
-                     description="Exterior paint/siding refresh"),
-            CapExItem("Windows", pv * 0.02, 30, self.property_age_years % 30,
-                     description="Window replacement"),
-            CapExItem("Plumbing", 5000, 40, self.property_age_years % 40,
-                     description="Major plumbing repairs"),
-            CapExItem("Electrical", 4000, 40, self.property_age_years % 40,
-                     description="Electrical system updates"),
-            CapExItem("Driveway/Walkways", 3000, 25, self.property_age_years % 25,
-                     description="Concrete/asphalt repairs"),
-            CapExItem("Landscaping", 2000, 10, self.property_age_years % 10,
-                     description="Major landscaping refresh"),
-        ]
-
     def estimate_closing_costs(self, loan_amount: float):
         """Estimate closing costs based on property value and loan amount."""
         pv = self.property_value
@@ -282,11 +214,6 @@ class RecurringCostSchedule:
         return self.schedule[self.schedule["year"] == 1]["total_recurring"].sum()
 
     @property
-    def total_capex_reserves_year_one(self) -> float:
-        """Total CapEx reserves needed in year one."""
-        return self.schedule[self.schedule["year"] == 1]["capex_reserve"].sum()
-
-    @property
     def total_costs_lifetime(self) -> float:
         """Total of all costs over analysis period."""
         return self.schedule["total_annual_cost"].sum()
@@ -313,8 +240,6 @@ def generate_recurring_cost_schedule(params: PropertyCostParameters) -> Recurrin
 
     Returns a DataFrame with annual projections including:
     - All recurring costs with inflation
-    - CapEx reserves
-    - CapEx replacement events
     - Category breakdowns
     """
     records = []
@@ -323,8 +248,6 @@ def generate_recurring_cost_schedule(params: PropertyCostParameters) -> Recurrin
         year_data = {
             "year": year,
             "total_recurring": 0.0,
-            "capex_reserve": 0.0,
-            "capex_events": 0.0,
         }
 
         # Initialize category totals
@@ -337,39 +260,7 @@ def generate_recurring_cost_schedule(params: PropertyCostParameters) -> Recurrin
             year_data["total_recurring"] += amount
             year_data[f"cat_{item.category.value}"] += amount
 
-        # Calculate CapEx reserves and events
-        for item in params.capex_items:
-            # Annual reserve with inflation
-            reserve = item.annual_reserve * (1 + item.inflation_rate) ** (year - 1)
-            year_data["capex_reserve"] += reserve
-            year_data[f"cat_{CostCategory.CAPEX.value}"] += reserve
-
-            # Check if replacement occurs this year
-            # First replacement: when current_age + years_elapsed reaches lifespan
-            # Subsequent replacements: every lifespan years after that
-            years_until_first = item.years_until_replacement  # lifespan - current_age
-            if years_until_first > 0:
-                # Item needs replacement when year == years_until_first,
-                # then again at years_until_first + lifespan, etc.
-                if year == years_until_first or (year > years_until_first and (year - years_until_first) % item.lifespan_years == 0):
-                    replacement_cost = item.replacement_cost_at_year(year - 1)
-                    year_data["capex_events"] += replacement_cost
-            elif years_until_first == 0 and item.lifespan_years > 0:
-                # Item is due for replacement immediately (current_age >= lifespan)
-                # Replace in year 1, then every lifespan years
-                if year == 1 or (year > 1 and (year - 1) % item.lifespan_years == 0):
-                    replacement_cost = item.replacement_cost_at_year(year - 1)
-                    year_data["capex_events"] += replacement_cost
-
-        year_data["total_annual_cost"] = (
-            year_data["total_recurring"] +
-            year_data["capex_reserve"]
-        )
-
-        year_data["total_with_capex_events"] = (
-            year_data["total_recurring"] +
-            year_data["capex_events"]
-        )
+        year_data["total_annual_cost"] = year_data["total_recurring"]
 
         # Monthly equivalents
         year_data["monthly_recurring"] = year_data["total_recurring"] / 12
@@ -416,7 +307,6 @@ def estimate_true_cost_of_ownership(
     property_value: float,
     loan_amount: float,
     monthly_pi: float,  # Principal & Interest payment
-    property_age_years: int = 0,
     analysis_years: int = 30,
     include_utilities: bool = True,
 ) -> dict:
@@ -427,12 +317,10 @@ def estimate_true_cost_of_ownership(
     """
     params = PropertyCostParameters(
         property_value=property_value,
-        property_age_years=property_age_years,
         analysis_years=analysis_years,
     )
 
     params.add_default_recurring_costs()
-    params.add_default_capex_items()
     params.estimate_closing_costs(loan_amount)
 
     # Remove utilities if not wanted
@@ -449,7 +337,6 @@ def estimate_true_cost_of_ownership(
     return {
         "mortgage_pi": monthly_pi,
         "recurring_costs": year_1["monthly_recurring"],
-        "capex_reserves": year_1["capex_reserve"] / 12,
         "total_monthly": monthly_pi + year_1["monthly_with_reserves"],
         "closing_costs": params.closing_costs.total,
         "schedule": schedule,
