@@ -42,6 +42,9 @@ class AssetBuildingTab(ctk.CTkFrame):
         self._maintenance_annual: float = 0
         self._utilities_annual: float = 0
 
+        # Analysis mode
+        self._is_existing_property: bool = False
+
         # Create main layout - left inputs, right plots
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
@@ -97,6 +100,14 @@ class AssetBuildingTab(ctk.CTkFrame):
         """
         self._maintenance_annual = maintenance_annual
         self._utilities_annual = utilities_annual
+
+    def set_holding_period(self, holding_years: int):
+        """Set the holding period for analysis (from Investment Summary tab)."""
+        self._holding_period_years = holding_years
+
+    def set_analysis_mode(self, is_existing_property: bool):
+        """Set the analysis mode (existing property vs new purchase)."""
+        self._is_existing_property = is_existing_property
 
     def _create_input_form(self):
         """Create the input form for asset building parameters."""
@@ -241,6 +252,23 @@ class AssetBuildingTab(ctk.CTkFrame):
         self.toolbar = None
         self.toolbar_frame = None
 
+    def clear_chart(self):
+        """Clear the current chart and reset data."""
+        import matplotlib.pyplot as plt
+
+        self.schedule = None
+        if self.canvas is not None:
+            fig = self.canvas.figure
+            self.canvas.get_tk_widget().destroy()
+            plt.close(fig)
+            self.canvas = None
+        if self.toolbar is not None:
+            self.toolbar.destroy()
+            self.toolbar = None
+        if self.toolbar_frame is not None:
+            self.toolbar_frame.destroy()
+            self.toolbar_frame = None
+
     def _get_params(self) -> AssetBuildingParameters:
         """Build parameters using data from Amortization and Recurring Costs tabs."""
         # Use safe parsing for all local inputs
@@ -255,6 +283,9 @@ class AssetBuildingTab(ctk.CTkFrame):
             property_management_rate=safe_percent(self.management_rate_entry.get(), 0.0),
         )
 
+        # Use holding period if set, otherwise fall back to loan term
+        analysis_years = getattr(self, '_holding_period_years', self._loan_term_years)
+
         return AssetBuildingParameters(
             property_value=self._property_value,
             purchase_price=self._purchase_price,
@@ -263,7 +294,7 @@ class AssetBuildingTab(ctk.CTkFrame):
             annual_interest_rate=self._annual_interest_rate,
             loan_term_years=self._loan_term_years,
             monthly_pi_payment=self._monthly_pi_payment,
-            analysis_years=self._loan_term_years,  # Use loan term as analysis period
+            analysis_years=analysis_years,
             appreciation_params=appreciation_params,
             rental_params=rental_params,
             property_taxes_annual=self._property_taxes_annual,
@@ -276,6 +307,7 @@ class AssetBuildingTab(ctk.CTkFrame):
             cost_inflation_rate=0.0,
             marginal_tax_rate=safe_percent(self.tax_rate_entry.get(), 0.0),
             depreciation_enabled=self.depreciation_var.get(),
+            is_existing_property=self._is_existing_property,
         )
 
     def calculate(self):
@@ -301,6 +333,9 @@ class AssetBuildingTab(ctk.CTkFrame):
             # Operating costs from Recurring Costs tab (single source of truth)
             "maintenance_annual": self._maintenance_annual,
             "utilities_annual": self._utilities_annual,
+            # Tax benefits
+            "marginal_tax_rate": safe_percent(self.tax_rate_entry.get(), 0.0),
+            "depreciation_enabled": self.depreciation_var.get(),
         }
 
     def load_config(self, cfg: dict) -> None:

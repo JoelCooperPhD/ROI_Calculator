@@ -29,7 +29,10 @@ def plot_equity_growth(schedule: AssetBuildingSchedule, ax=None) -> Figure:
     principal = df["cumulative_principal"].values
     appreciation = df["appreciation_equity"].values
 
-    ax.fill_between(years, 0, initial, alpha=0.8, color="#3498db", label="Down Payment")
+    # Use appropriate label based on analysis mode
+    initial_equity_label = "Current Equity" if schedule.params.is_existing_property else "Down Payment"
+
+    ax.fill_between(years, 0, initial, alpha=0.8, color="#3498db", label=initial_equity_label)
     ax.fill_between(years, initial, np.array(initial) + principal, alpha=0.8, color="#2ecc71", label="Principal Paydown")
     ax.fill_between(years, np.array(initial) + principal, np.array(initial) + principal + appreciation,
                     alpha=0.8, color="#f39c12", label="Appreciation")
@@ -122,19 +125,21 @@ def plot_cash_flow_over_time(schedule: AssetBuildingSchedule, ax=None) -> Figure
     else:
         fig = ax.get_figure()
 
-    years = df["year"]
+    # Exclude year 0 - cash flow is per-year, year 0 is just the starting point
+    df_plot = df[df["year"] > 0]
+    years = df_plot["year"]
 
     # Color bars based on positive/negative cash flow
-    colors = ["#2ecc71" if x >= 0 else "#e74c3c" for x in df["net_cash_flow"]]
+    colors = ["#2ecc71" if x >= 0 else "#e74c3c" for x in df_plot["net_cash_flow"]]
 
-    ax.bar(years, df["net_cash_flow"], color=colors, alpha=0.8, label="Net Cash Flow")
+    ax.bar(years, df_plot["net_cash_flow"], color=colors, alpha=0.8, label="Net Cash Flow")
 
     # Add zero line
     ax.axhline(y=0, color="white", linestyle="-", linewidth=1, alpha=0.5)
 
     # Add cumulative line on secondary axis
     ax2 = ax.twinx()
-    ax2.plot(years, df["cumulative_cash_flow"], color="#f39c12", linewidth=2,
+    ax2.plot(years, df_plot["cumulative_cash_flow"], color="#f39c12", linewidth=2,
              linestyle="--", label="Cumulative")
     ax2.set_ylabel("Cumulative Cash Flow ($)", color="#f39c12")
     ax2.tick_params(axis="y", labelcolor="#f39c12")
@@ -164,18 +169,20 @@ def plot_rental_income_breakdown(schedule: AssetBuildingSchedule, ax=None) -> Fi
     else:
         fig = ax.get_figure()
 
-    years = df["year"]
+    # Exclude year 0 - this shows annual income/expenses, year 0 is starting point
+    df_plot = df[df["year"] > 0]
+    years = df_plot["year"]
     width = 0.35
 
     # Income side
-    ax.bar(years - width/2, df["effective_rent"], width, color="#2ecc71", alpha=0.8, label="Effective Rent")
+    ax.bar(years - width/2, df_plot["effective_rent"], width, color="#2ecc71", alpha=0.8, label="Effective Rent")
 
     # Expense side (stacked)
-    ax.bar(years + width/2, df["mortgage_payment"], width, color="#e74c3c", alpha=0.8, label="Mortgage P&I")
-    ax.bar(years + width/2, df["operating_costs"], width, bottom=df["mortgage_payment"],
+    ax.bar(years + width/2, df_plot["mortgage_payment"], width, color="#e74c3c", alpha=0.8, label="Mortgage P&I")
+    ax.bar(years + width/2, df_plot["operating_costs"], width, bottom=df_plot["mortgage_payment"],
            color="#f39c12", alpha=0.8, label="Operating Costs")
-    ax.bar(years + width/2, df["management_cost"], width,
-           bottom=df["mortgage_payment"] + df["operating_costs"],
+    ax.bar(years + width/2, df_plot["management_cost"], width,
+           bottom=df_plot["mortgage_payment"] + df_plot["operating_costs"],
            color="#9b59b6", alpha=0.8, label="Management")
 
     style_axis(ax, "Rental Income vs Expenses", "Year", "Annual Amount ($)")
@@ -264,9 +271,12 @@ def plot_wealth_waterfall(schedule: AssetBuildingSchedule, ax=None) -> Figure:
 
     params = schedule.params
 
+    # Use appropriate label based on analysis mode
+    initial_equity_label = "Current Equity" if params.is_existing_property else "Down Payment"
+
     # Components
     categories = [
-        "Down Payment",
+        initial_equity_label,
         "Principal Paydown",
         "Appreciation",
         "Cumulative Cash Flow",

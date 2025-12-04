@@ -54,6 +54,10 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self._maintenance_annual: float = 0
         self._utilities_annual: float = 0
 
+        # Tax benefits from Asset Building tab
+        self._marginal_tax_rate: float = 0.0
+        self._depreciation_enabled: bool = False
+
         # Renovation parameters from Amortization tab
         self._renovation_enabled: bool = False
         self._renovation_cost: float = 0
@@ -117,10 +121,13 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         management_rate: float,
         maintenance_annual: float,
         utilities_annual: float,
+        marginal_tax_rate: float = 0.0,
+        depreciation_enabled: bool = False,
     ):
         """Set asset building parameters from the Asset Building tab.
 
         Operating costs (maintenance, utilities) originate from Recurring Costs tab.
+        Tax benefits (marginal_tax_rate, depreciation_enabled) from Asset Building tab.
         """
         self._appreciation_rate = appreciation_rate
         self._monthly_rent = monthly_rent
@@ -130,6 +137,9 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         # Operating costs from Recurring Costs tab (single source of truth)
         self._maintenance_annual = maintenance_annual
         self._utilities_annual = utilities_annual
+        # Tax benefits from Asset Building tab
+        self._marginal_tax_rate = marginal_tax_rate
+        self._depreciation_enabled = depreciation_enabled
 
     def set_analysis_mode(self, is_existing_property: bool):
         """Set the analysis mode and update available plots accordingly."""
@@ -456,6 +466,23 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.toolbar = None
         self.toolbar_frame = None
 
+    def clear_chart(self):
+        """Clear the current chart and reset data."""
+        import matplotlib.pyplot as plt
+
+        self.summary = None
+        if self.canvas is not None:
+            fig = self.canvas.figure
+            self.canvas.get_tk_widget().destroy()
+            plt.close(fig)
+            self.canvas = None
+        if self.toolbar is not None:
+            self.toolbar.destroy()
+            self.toolbar = None
+        if self.toolbar_frame is not None:
+            self.toolbar_frame.destroy()
+            self.toolbar_frame = None
+
     def _update_plot_options(self):
         """Update available plot options based on analysis mode."""
         if self._is_existing_property:
@@ -513,6 +540,9 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             renovation_cost=self._renovation_cost,
             renovation_duration_months=self._renovation_duration_months,
             rent_during_renovation_pct=self._rent_during_renovation_pct,
+            # Tax benefits from Asset Building tab
+            marginal_tax_rate=self._marginal_tax_rate,
+            depreciation_enabled=self._depreciation_enabled,
         )
 
     def calculate(self):

@@ -36,21 +36,26 @@ def style_axis(ax, title: str = "", xlabel: str = "", ylabel: str = ""):
     ax.grid(True, alpha=0.3, color="gray")
 
 
-def plot_balance_over_time(schedule: AmortizationSchedule, ax=None) -> Figure:
+def plot_balance_over_time(schedule: AmortizationSchedule, ax=None, max_years: int = None) -> Figure:
     """
     Plot remaining balance over the life of the loan.
 
     Shows how the principal decreases over time.
     """
     df = schedule.schedule
+    years = df["payment_date_months"] / 12
+
+    # Filter to max_years if specified
+    if max_years is not None:
+        mask = years <= max_years
+        df = df[mask]
+        years = years[mask]
 
     if ax is None:
         fig = create_figure()
         ax = fig.add_subplot(111)
     else:
         fig = ax.get_figure()
-
-    years = df["payment_date_months"] / 12
 
     ax.fill_between(years, df["ending_balance"], alpha=0.3, color="#3498db")
     ax.plot(years, df["ending_balance"], color="#3498db", linewidth=2,
@@ -63,21 +68,26 @@ def plot_balance_over_time(schedule: AmortizationSchedule, ax=None) -> Figure:
     return fig
 
 
-def plot_payment_breakdown(schedule: AmortizationSchedule, ax=None) -> Figure:
+def plot_payment_breakdown(schedule: AmortizationSchedule, ax=None, max_years: int = None) -> Figure:
     """
     Plot principal vs interest payment breakdown over time.
 
     Shows how payments shift from interest-heavy to principal-heavy.
     """
     df = schedule.schedule
+    years = df["payment_date_months"] / 12
+
+    # Filter to max_years if specified
+    if max_years is not None:
+        mask = years <= max_years
+        df = df[mask]
+        years = years[mask]
 
     if ax is None:
         fig = create_figure()
         ax = fig.add_subplot(111)
     else:
         fig = ax.get_figure()
-
-    years = df["payment_date_months"] / 12
 
     ax.stackplot(years,
                  df["principal_payment"],
@@ -93,21 +103,26 @@ def plot_payment_breakdown(schedule: AmortizationSchedule, ax=None) -> Figure:
     return fig
 
 
-def plot_cumulative_payments(schedule: AmortizationSchedule, ax=None) -> Figure:
+def plot_cumulative_payments(schedule: AmortizationSchedule, ax=None, max_years: int = None) -> Figure:
     """
     Plot cumulative principal and interest paid over time.
 
     Shows total amounts paid toward each component.
     """
     df = schedule.schedule
+    years = df["payment_date_months"] / 12
+
+    # Filter to max_years if specified
+    if max_years is not None:
+        mask = years <= max_years
+        df = df[mask]
+        years = years[mask]
 
     if ax is None:
         fig = create_figure()
         ax = fig.add_subplot(111)
     else:
         fig = ax.get_figure()
-
-    years = df["payment_date_months"] / 12
 
     ax.plot(years, df["cumulative_principal"], color="#2ecc71", linewidth=2,
             label="Cumulative Principal")
@@ -123,21 +138,26 @@ def plot_cumulative_payments(schedule: AmortizationSchedule, ax=None) -> Figure:
     return fig
 
 
-def plot_equity_buildup(schedule: AmortizationSchedule, ax=None) -> Figure:
+def plot_equity_buildup(schedule: AmortizationSchedule, ax=None, max_years: int = None) -> Figure:
     """
     Plot equity buildup over time.
 
     Shows how equity grows as the loan is paid down.
     """
     df = schedule.schedule
+    years = df["payment_date_months"] / 12
+
+    # Filter to max_years if specified
+    if max_years is not None:
+        mask = years <= max_years
+        df = df[mask]
+        years = years[mask]
 
     if ax is None:
         fig = create_figure()
         ax = fig.add_subplot(111)
     else:
         fig = ax.get_figure()
-
-    years = df["payment_date_months"] / 12
 
     ax.fill_between(years, df["equity"], alpha=0.3, color="#9b59b6")
     ax.plot(years, df["equity"], color="#9b59b6", linewidth=2, label="Equity")
@@ -153,13 +173,20 @@ def plot_equity_buildup(schedule: AmortizationSchedule, ax=None) -> Figure:
     return fig
 
 
-def plot_ltv_over_time(schedule: AmortizationSchedule, ax=None) -> Figure:
+def plot_ltv_over_time(schedule: AmortizationSchedule, ax=None, max_years: int = None) -> Figure:
     """
     Plot Loan-to-Value ratio over time.
 
     Shows LTV decreasing and highlights the 80% PMI threshold.
     """
     df = schedule.schedule
+    years = df["payment_date_months"] / 12
+
+    # Filter to max_years if specified
+    if max_years is not None:
+        mask = years <= max_years
+        df = df[mask]
+        years = years[mask]
 
     if ax is None:
         fig = create_figure()
@@ -167,7 +194,6 @@ def plot_ltv_over_time(schedule: AmortizationSchedule, ax=None) -> Figure:
     else:
         fig = ax.get_figure()
 
-    years = df["payment_date_months"] / 12
     ltv_percent = df["loan_to_value"] * 100
 
     ax.plot(years, ltv_percent, color="#3498db", linewidth=2, label="LTV %")
@@ -184,13 +210,20 @@ def plot_ltv_over_time(schedule: AmortizationSchedule, ax=None) -> Figure:
     return fig
 
 
-def plot_interest_rate_composition(schedule: AmortizationSchedule, ax=None) -> Figure:
+def plot_interest_rate_composition(schedule: AmortizationSchedule, ax=None, max_years: int = None) -> Figure:
     """
     Plot the proportion of each payment going to interest vs principal.
 
     Shows percentage breakdown over time.
     """
     df = schedule.schedule
+    years = df["payment_date_months"] / 12
+
+    # Filter to max_years if specified
+    if max_years is not None:
+        mask = years <= max_years
+        df = df[mask]
+        years = years[mask]
 
     if ax is None:
         fig = create_figure()
@@ -198,7 +231,6 @@ def plot_interest_rate_composition(schedule: AmortizationSchedule, ax=None) -> F
     else:
         fig = ax.get_figure()
 
-    years = df["payment_date_months"] / 12
     total = df["principal_payment"] + df["interest_payment"]
     interest_pct = (df["interest_payment"] / total) * 100
     principal_pct = (df["principal_payment"] / total) * 100
@@ -217,21 +249,26 @@ def plot_interest_rate_composition(schedule: AmortizationSchedule, ax=None) -> F
     return fig
 
 
-def plot_total_monthly_cost(schedule: AmortizationSchedule, ax=None) -> Figure:
+def plot_total_monthly_cost(schedule: AmortizationSchedule, ax=None, max_years: int = None) -> Figure:
     """
     Plot total monthly cost breakdown including PITI, PMI, and HOA.
 
     Shows all components of the monthly housing payment.
     """
     df = schedule.schedule
+    years = df["payment_date_months"] / 12
+
+    # Filter to max_years if specified
+    if max_years is not None:
+        mask = years <= max_years
+        df = df[mask]
+        years = years[mask]
 
     if ax is None:
         fig = create_figure()
         ax = fig.add_subplot(111)
     else:
         fig = ax.get_figure()
-
-    years = df["payment_date_months"] / 12
 
     # Stack all cost components
     components = []

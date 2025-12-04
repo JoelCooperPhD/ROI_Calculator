@@ -116,6 +116,9 @@ class AssetBuildingParameters:
     marginal_tax_rate: float = 0.0  # For mortgage interest deduction
     depreciation_enabled: bool = False  # 27.5 year depreciation for rentals
 
+    # Analysis mode
+    is_existing_property: bool = False  # True if analyzing existing property vs new purchase
+
     @property
     def initial_equity(self) -> float:
         """Initial equity from down payment."""
@@ -238,8 +241,10 @@ class AssetBuildingSchedule:
 
     def equity_by_source(self) -> dict[str, float]:
         """Break down equity by source at end of analysis."""
+        # Use appropriate label based on analysis mode
+        initial_label = "Current Equity" if self.params.is_existing_property else "Initial Down Payment"
         return {
-            "Initial Down Payment": self.params.initial_equity,
+            initial_label: self.params.initial_equity,
             "Principal Paydown": self.total_principal_paid,
             "Appreciation": self.total_appreciation_gain,
         }
@@ -330,6 +335,59 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
 
     records = []
     property_value = params.property_value
+
+    # Add year 0 (starting position / today)
+    initial_ltv = (params.loan_amount / params.property_value * 100) if params.property_value > 0 else 0
+    initial_monthly_rent = params.rental_params.monthly_rent
+    initial_gross_rent = initial_monthly_rent * 12
+    initial_vacancy_loss = initial_gross_rent * params.rental_params.vacancy_rate
+    initial_effective_rent = initial_gross_rent - initial_vacancy_loss
+    initial_management_cost = initial_effective_rent * params.rental_params.property_management_rate
+    initial_noi = initial_effective_rent - params.total_annual_operating_costs
+    initial_cap_rate = (initial_noi / params.property_value * 100) if params.property_value > 0 else 0
+
+    records.append({
+        "year": 0,
+        # Property values
+        "property_value": params.property_value,
+        "appreciation_rate": 0,
+        "appreciation_gain_ytd": 0,
+        # Loan details
+        "loan_balance": params.loan_amount,
+        "principal_paid": 0,
+        "interest_paid": 0,
+        "cumulative_principal": 0,
+        "mortgage_payment": 0,
+        "ltv": initial_ltv,
+        # Equity
+        "appreciation_equity": 0,
+        "principal_equity": 0,
+        "initial_equity": params.initial_equity,
+        "total_equity": params.initial_equity,
+        # Rental income
+        "monthly_rent": initial_monthly_rent,
+        "gross_rent": initial_gross_rent,
+        "vacancy_loss": initial_vacancy_loss,
+        "effective_rent": initial_effective_rent,
+        "management_cost": initial_management_cost,
+        "rental_income": initial_effective_rent - initial_management_cost,
+        # Costs
+        "operating_costs": params.total_annual_operating_costs,
+        "total_expenses": 0,
+        # Tax benefits
+        "interest_deduction": 0,
+        "depreciation_benefit": 0,
+        "total_tax_benefit": 0,
+        # Cash flow (year 0 has no cash flow - it's the starting point)
+        "pre_tax_cash_flow": 0,
+        "net_cash_flow": 0,
+        "cumulative_cash_flow": 0,
+        # Returns
+        "cash_on_cash": 0,
+        "equity_roi": 0,
+        "cap_rate": initial_cap_rate,
+        "noi": initial_noi,
+    })
 
     for year in range(1, params.analysis_years + 1):
         # Get appreciation rate for this year
@@ -463,7 +521,8 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
 
     # Calculate annualized return (CAGR)
     def calc_cagr(row):
-        if params.initial_equity <= 0:
+        # Year 0 has no return yet (starting point)
+        if row["year"] == 0 or params.initial_equity <= 0:
             return 0
         total_value = params.initial_equity + row["total_return"]
         if total_value > 0:

@@ -64,6 +64,10 @@ class InvestmentParameters:
     renovation_duration_months: int = 0
     rent_during_renovation_pct: float = 0.0  # 0 = vacant, 1.0 = full rent
 
+    # Tax benefits
+    marginal_tax_rate: float = 0.0  # For mortgage interest deduction
+    depreciation_enabled: bool = False  # 27.5 year depreciation for rentals
+
     @property
     def total_initial_investment(self) -> float:
         """Total cash required at purchase (includes renovation cost)."""
@@ -98,6 +102,18 @@ class InvestmentParameters:
             return self.property_value - self.effective_purchase_price
         return 0.0
 
+    @property
+    def building_value_for_depreciation(self) -> float:
+        """Building value for depreciation (typically 80% of property value)."""
+        return self.property_value * 0.80  # Land typically 20%
+
+    @property
+    def annual_depreciation(self) -> float:
+        """Annual depreciation amount for tax purposes."""
+        if not self.depreciation_enabled:
+            return 0.0
+        return self.building_value_for_depreciation / 27.5
+
 
 @dataclass
 class YearlyProjection:
@@ -116,10 +132,17 @@ class YearlyProjection:
 
     # Expenses
     mortgage_payment: float
+    interest_paid: float  # For tax benefit calculation
     operating_costs: float
     total_expenses: float
 
+    # Tax benefits
+    interest_deduction: float
+    depreciation_benefit: float
+    total_tax_benefit: float
+
     # Cash flow
+    pre_tax_cash_flow: float
     net_cash_flow: float
     cumulative_cash_flow: float
 
@@ -178,8 +201,14 @@ def generate_amortization_balances(
     annual_rate: float,
     term_years: int,
     max_years: int
-) -> list[float]:
-    """Generate year-end loan balances."""
+) -> tuple[list[float], list[float]]:
+    """Generate year-end loan balances and annual interest paid.
+
+    Returns:
+        Tuple of (balances, interest_by_year) where:
+        - balances: list of year-end loan balances
+        - interest_by_year: list of interest paid each year
+    """
     monthly_rate = annual_rate / 12
     total_payments = term_years * 12
 
@@ -187,18 +216,22 @@ def generate_amortization_balances(
     payment = calculate_periodic_payment(loan_amount, monthly_rate, total_payments)
 
     balances = []
+    interest_by_year = []
     balance = loan_amount
 
     for year in range(1, max_years + 1):
+        year_interest = 0.0
         for month in range(12):
             if balance <= 0:
                 break
             interest = balance * monthly_rate
+            year_interest += interest
             principal = min(payment - interest, balance)
             balance = max(0, balance - principal)
         balances.append(balance)
+        interest_by_year.append(year_interest)
 
-    return balances
+    return balances, interest_by_year
 
 
 def calculate_irr(cash_flows: list[float]) -> float:
@@ -315,8 +348,8 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
 
     This is the main function that brings everything together.
     """
-    # Generate loan balances for the holding period
-    loan_balances = generate_amortization_balances(
+    # Generate loan balances and interest for the holding period
+    loan_balances, interest_by_year = generate_amortization_balances(
         params.loan_amount,
         params.annual_interest_rate,
         params.loan_term_years,
@@ -336,8 +369,9 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         # Property appreciation (from post-renovation value if applicable)
         property_value = base_property_value * ((1 + params.appreciation_rate) ** year)
 
-        # Loan balance
+        # Loan balance and interest paid this year
         loan_balance = loan_balances[year - 1] if year <= len(loan_balances) else 0
+        interest_paid = interest_by_year[year - 1] if year <= len(interest_by_year) else 0
 
         # Equity
         equity = property_value - loan_balance
@@ -376,8 +410,14 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         operating_costs = params.annual_operating_costs * cost_inflation
 
         # Mortgage payment (P&I only, operating costs separate)
-        # If loan is paid off (balance is 0), no more mortgage payments
-        if loan_balance > 0:
+        # Pay mortgage if loan existed at START of year (not end of year)
+        # This ensures we charge mortgage payments for the year the loan gets paid off
+        if year == 1:
+            start_of_year_balance = params.loan_amount
+        else:
+            start_of_year_balance = loan_balances[year - 2]
+
+        if start_of_year_balance > 0:
             mortgage_payment = params.monthly_pi_payment * 12
         else:
             mortgage_payment = 0
@@ -385,8 +425,16 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         # Total expenses (management_cost already subtracted in net_rental_income)
         total_expenses = mortgage_payment + operating_costs
 
-        # Net cash flow for the year
-        net_cash_flow = net_rental_income - total_expenses
+        # Calculate tax benefits
+        interest_deduction = interest_paid * params.marginal_tax_rate
+        depreciation_benefit = params.annual_depreciation * params.marginal_tax_rate
+        total_tax_benefit = interest_deduction + depreciation_benefit
+
+        # Pre-tax cash flow
+        pre_tax_cash_flow = net_rental_income - total_expenses
+
+        # Net cash flow for the year (includes tax benefits)
+        net_cash_flow = pre_tax_cash_flow + total_tax_benefit
         cumulative_cash_flow += net_cash_flow
 
         # If sold at end of this year
@@ -408,8 +456,13 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
             management_cost=management_cost,
             net_rental_income=net_rental_income,
             mortgage_payment=mortgage_payment,
+            interest_paid=interest_paid,
             operating_costs=operating_costs,
             total_expenses=total_expenses,
+            interest_deduction=interest_deduction,
+            depreciation_benefit=depreciation_benefit,
+            total_tax_benefit=total_tax_benefit,
+            pre_tax_cash_flow=pre_tax_cash_flow,
             net_cash_flow=net_cash_flow,
             cumulative_cash_flow=cumulative_cash_flow,
             sale_price=sale_price,

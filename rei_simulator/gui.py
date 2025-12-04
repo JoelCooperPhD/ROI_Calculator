@@ -47,99 +47,51 @@ class AmortizationTab(ctk.CTkFrame):
         self._create_plot_area()
 
     def _create_input_form(self):
-        """Create the input form for loan parameters."""
+        """Create the input form for property and loan parameters."""
         # Title
         title = ctk.CTkLabel(
             self.input_frame,
-            text="Loan Parameters",
+            text="Property & Loan",
             font=ctk.CTkFont(size=18, weight="bold")
         )
         title.pack(pady=(0, 10))
 
-        # Analysis Mode selector
-        mode_frame = ctk.CTkFrame(self.input_frame)
-        mode_frame.pack(fill="x", pady=(0, 15))
-
-        mode_label = ctk.CTkLabel(
-            mode_frame,
-            text="Analysis Mode:",
-            font=ctk.CTkFont(size=12, weight="bold")
-        )
-        mode_label.pack(pady=(10, 5))
-
+        # Analysis mode variable (will be controlled by MainApplication)
         self.analysis_mode_var = ctk.StringVar(value="New Purchase")
-        self.mode_segment = ctk.CTkSegmentedButton(
-            mode_frame,
-            values=["New Purchase", "Existing Property"],
-            variable=self.analysis_mode_var,
-            command=self._on_mode_change
-        )
-        self.mode_segment.pack(pady=(0, 10))
 
-        # Mode help text
+        # Mode help text (shows context for current mode)
         self.mode_help_label = ctk.CTkLabel(
-            mode_frame,
-            text="Analyzing a new property purchase",
-            font=ctk.CTkFont(size=10),
-            text_color="gray"
-        )
-        self.mode_help_label.pack(pady=(0, 5))
-
-        # Core loan parameters section
-        self.section_label = ctk.CTkLabel(
             self.input_frame,
-            text="Core Loan Details",
+            text="Analyzing a new property purchase",
+            font=ctk.CTkFont(size=11),
+            text_color="#3498db"
+        )
+        self.mode_help_label.pack(pady=(0, 10))
+
+        # ===== PROPERTY DETAILS SECTION =====
+        property_section = ctk.CTkLabel(
+            self.input_frame,
+            text="Property Details",
             font=ctk.CTkFont(size=14, weight="bold")
         )
-        self.section_label.pack(anchor="w", pady=(10, 5))
+        property_section.pack(anchor="w", pady=(10, 5))
 
         self.property_value_entry = LabeledEntry(
             self.input_frame, "Property Value ($):", "400000"
         )
         self.property_value_entry.pack(fill="x", pady=5)
 
-        self.down_payment_entry = LabeledEntry(
-            self.input_frame, "Down Payment ($):", "80000"
-        )
-        self.down_payment_entry.pack(fill="x", pady=5)
-
-        self.interest_rate_entry = LabeledEntry(
-            self.input_frame, "Annual Interest Rate (%):", "6.5"
-        )
-        self.interest_rate_entry.pack(fill="x", pady=5)
-
-        self.loan_term_entry = LabeledEntry(
-            self.input_frame, "Loan Term (years):", "30"
-        )
-        self.loan_term_entry.pack(fill="x", pady=5)
-
-        # Payment frequency
-        freq_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
-        freq_frame.pack(fill="x", pady=5)
-
-        freq_label = ctk.CTkLabel(freq_frame, text="Payment Frequency:", anchor="w", width=180)
-        freq_label.pack(side="left", padx=(0, 10))
-
-        self.frequency_var = ctk.StringVar(value="Monthly")
-        self.frequency_menu = ctk.CTkOptionMenu(
-            freq_frame,
-            variable=self.frequency_var,
-            values=["Monthly", "Biweekly", "Weekly"],
-            width=120
-        )
-        self.frequency_menu.pack(side="left")
-
-        # Recurring ownership costs section
-        section_label2 = ctk.CTkLabel(
+        # Recurring ownership costs (always apply, loan or not)
+        ownership_section = ctk.CTkLabel(
             self.input_frame,
-            text="Recurring Ownership Costs",
+            text="Ownership Costs",
             font=ctk.CTkFont(size=14, weight="bold")
         )
-        section_label2.pack(anchor="w", pady=(20, 5))
+        ownership_section.pack(anchor="w", pady=(15, 5))
 
         ownership_note = ctk.CTkLabel(
             self.input_frame,
-            text="(These flow to Recurring Costs tab for projections)",
+            text="(These flow to Recurring Costs tab)",
             font=ctk.CTkFont(size=10),
             text_color="gray"
         )
@@ -160,21 +112,76 @@ class AmortizationTab(ctk.CTkFrame):
         )
         self.hoa_entry.pack(fill="x", pady=5)
 
-        # Loan-specific costs section
-        section_label3 = ctk.CTkLabel(
+        # ===== LOAN SECTION =====
+        # Has Loan checkbox - prominent toggle
+        self.has_loan_var = ctk.BooleanVar(value=True)
+        self.has_loan_check = ctk.CTkCheckBox(
             self.input_frame,
-            text="Loan-Specific Costs",
-            font=ctk.CTkFont(size=14, weight="bold")
+            text="Property Has a Loan",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            variable=self.has_loan_var,
+            command=self._toggle_loan_fields
         )
-        section_label3.pack(anchor="w", pady=(20, 5))
+        self.has_loan_check.pack(anchor="w", pady=(20, 5))
+
+        # Loan details frame (can be shown/hidden)
+        self.loan_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
+        self.loan_frame.pack(fill="x", pady=5)
+
+        # Core loan parameters
+        self.section_label = ctk.CTkLabel(
+            self.loan_frame,
+            text="Loan Details",
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        self.section_label.pack(anchor="w", pady=(5, 5))
+
+        self.down_payment_entry = LabeledEntry(
+            self.loan_frame, "Down Payment ($):", "80000"
+        )
+        self.down_payment_entry.pack(fill="x", pady=5)
+
+        self.interest_rate_entry = LabeledEntry(
+            self.loan_frame, "Annual Interest Rate (%):", "6.5"
+        )
+        self.interest_rate_entry.pack(fill="x", pady=5)
+
+        self.loan_term_entry = LabeledEntry(
+            self.loan_frame, "Loan Term (years):", "30"
+        )
+        self.loan_term_entry.pack(fill="x", pady=5)
+
+        # Payment frequency
+        freq_frame = ctk.CTkFrame(self.loan_frame, fg_color="transparent")
+        freq_frame.pack(fill="x", pady=5)
+
+        freq_label = ctk.CTkLabel(freq_frame, text="Payment Frequency:", anchor="w", width=180)
+        freq_label.pack(side="left", padx=(0, 10))
+
+        self.frequency_var = ctk.StringVar(value="Monthly")
+        self.frequency_menu = ctk.CTkOptionMenu(
+            freq_frame,
+            variable=self.frequency_var,
+            values=["Monthly", "Biweekly", "Weekly"],
+            width=120
+        )
+        self.frequency_menu.pack(side="left")
+
+        # Loan-specific costs section
+        loan_costs_label = ctk.CTkLabel(
+            self.loan_frame,
+            text="Loan Costs",
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        loan_costs_label.pack(anchor="w", pady=(15, 5))
 
         self.pmi_rate_entry = LabeledEntry(
-            self.input_frame, "PMI Rate (%):", "0.5"
+            self.loan_frame, "PMI Rate (%):", "0.5"
         )
         self.pmi_rate_entry.pack(fill="x", pady=5)
 
         pmi_note = ctk.CTkLabel(
-            self.input_frame,
+            self.loan_frame,
             text="(Applied when LTV > 80%)",
             font=ctk.CTkFont(size=10),
             text_color="gray"
@@ -182,12 +189,12 @@ class AmortizationTab(ctk.CTkFrame):
         pmi_note.pack(anchor="w", padx=(190, 0))
 
         self.closing_costs_entry = LabeledEntry(
-            self.input_frame, "Closing Costs ($):", "8000"
+            self.loan_frame, "Closing Costs ($):", "8000"
         )
         self.closing_costs_entry.pack(fill="x", pady=5)
 
         closing_note = ctk.CTkLabel(
-            self.input_frame,
+            self.loan_frame,
             text="(One-time purchase expense)",
             font=ctk.CTkFont(size=10),
             text_color="gray"
@@ -195,20 +202,27 @@ class AmortizationTab(ctk.CTkFrame):
         closing_note.pack(anchor="w", padx=(190, 0))
 
         # Extra payments section
-        section_label4 = ctk.CTkLabel(
-            self.input_frame,
+        extra_label = ctk.CTkLabel(
+            self.loan_frame,
             text="Extra Payments",
-            font=ctk.CTkFont(size=14, weight="bold")
+            font=ctk.CTkFont(size=12, weight="bold")
         )
-        section_label4.pack(anchor="w", pady=(20, 5))
+        extra_label.pack(anchor="w", pady=(15, 5))
 
         self.extra_payment_entry = LabeledEntry(
-            self.input_frame, "Extra Monthly Payment ($):", "0"
+            self.loan_frame, "Extra Monthly Payment ($):", "0"
         )
         self.extra_payment_entry.pack(fill="x", pady=5)
 
         # Renovation/Rehab section (collapsible)
         self._create_renovation_section()
+
+    def _toggle_loan_fields(self):
+        """Show/hide loan fields based on Has Loan checkbox."""
+        if self.has_loan_var.get():
+            self.loan_frame.pack(fill="x", pady=5, after=self.has_loan_check)
+        else:
+            self.loan_frame.pack_forget()
 
 
     def _create_plot_area(self):
@@ -343,11 +357,14 @@ class AmortizationTab(ctk.CTkFrame):
             "rent_during_pct": safe_percent(self.rent_during_reno_entry.get(), 0.0),
         }
 
+    def has_loan(self) -> bool:
+        """Return True if property has a loan."""
+        return self.has_loan_var.get()
+
     def get_loan_params(self) -> LoanParameters:
         """Extract loan parameters from the form with robust validation."""
         # Use safe parsing for all numeric inputs
         property_value = safe_positive_float(self.property_value_entry.get(), 400000.0)
-        down_payment = safe_positive_float(self.down_payment_entry.get(), 0.0)
 
         # Get renovation params
         reno = self.get_renovation_params()
@@ -363,6 +380,37 @@ class AmortizationTab(ctk.CTkFrame):
         else:
             purchase_price = property_value
 
+        # Property ownership costs (apply whether or not there's a loan)
+        property_tax_rate = safe_percent(self.property_tax_entry.get(), 0.012)  # default 1.2%
+        insurance_annual = safe_positive_float(self.insurance_entry.get(), 0.0)
+        hoa_monthly = safe_positive_float(self.hoa_entry.get(), 0.0)
+
+        # If no loan, set loan-related fields to zero
+        if not self.has_loan_var.get():
+            return LoanParameters(
+                principal=0,
+                annual_interest_rate=0,
+                loan_term_years=30,  # Doesn't matter, no loan
+                payment_frequency=PaymentFrequency.MONTHLY,
+                down_payment=property_value,  # Full cash purchase = "down payment" is full value
+                property_value=property_value,
+                purchase_price=purchase_price,
+                closing_costs=0,  # No loan closing costs
+                pmi_rate=0,
+                property_tax_rate=property_tax_rate,
+                insurance_annual=insurance_annual,
+                hoa_monthly=hoa_monthly,
+                extra_monthly_payment=0,
+                # Renovation parameters
+                renovation_enabled=reno["enabled"],
+                renovation_cost=reno["cost"],
+                renovation_duration_months=reno["duration_months"],
+                rent_during_renovation_pct=reno["rent_during_pct"],
+            )
+
+        # Has loan - parse loan-specific fields
+        down_payment = safe_positive_float(self.down_payment_entry.get(), 0.0)
+
         # Loan is based on purchase price, NOT ARV
         # Ensure down payment doesn't exceed purchase price
         down_payment = min(down_payment, purchase_price)
@@ -377,14 +425,11 @@ class AmortizationTab(ctk.CTkFrame):
         }
         frequency = freq_map.get(self.frequency_var.get(), PaymentFrequency.MONTHLY)
 
-        # Parse other fields with safe defaults
+        # Parse loan-specific fields
         interest_rate = safe_float(self.interest_rate_entry.get(), 6.5, min_val=0.0, max_val=30.0) / 100
         loan_term = safe_int(self.loan_term_entry.get(), 30, min_val=1, max_val=50)
         closing_costs = safe_positive_float(self.closing_costs_entry.get(), 0.0)
         pmi_rate = safe_percent(self.pmi_rate_entry.get(), 0.005)  # default 0.5%
-        property_tax_rate = safe_percent(self.property_tax_entry.get(), 0.012)  # default 1.2%
-        insurance_annual = safe_positive_float(self.insurance_entry.get(), 0.0)
-        hoa_monthly = safe_positive_float(self.hoa_entry.get(), 0.0)
         extra_payment = safe_positive_float(self.extra_payment_entry.get(), 0.0)
 
         return LoanParameters(
@@ -437,6 +482,9 @@ class AmortizationTab(ctk.CTkFrame):
         # Create new figure based on selection
         plot_type = self.plot_var.get()
 
+        # Get holding period for chart truncation (if set)
+        max_years = getattr(self, '_holding_period_years', None)
+
         plot_functions = {
             "Total Monthly Cost": plots.plot_total_monthly_cost,
             "Payment Breakdown": plots.plot_payment_breakdown,
@@ -444,7 +492,7 @@ class AmortizationTab(ctk.CTkFrame):
             "LTV Over Time": plots.plot_ltv_over_time,
         }
 
-        fig = plot_functions[plot_type](self.schedule)
+        fig = plot_functions[plot_type](self.schedule, max_years=max_years)
         fig.tight_layout()
 
         # Embed in tkinter
@@ -458,6 +506,32 @@ class AmortizationTab(ctk.CTkFrame):
         self.toolbar = NavigationToolbar2Tk(self.canvas, self.toolbar_frame)
         self.toolbar.update()
 
+    def set_analysis_mode(self, mode: str):
+        """Set the analysis mode from external control (MainApplication)."""
+        self.analysis_mode_var.set(mode)
+        self._on_mode_change(mode)
+
+    def set_holding_period(self, holding_years: int):
+        """Set the holding period for chart display (from Investment Summary tab)."""
+        self._holding_period_years = holding_years
+
+    def clear_chart(self):
+        """Clear the current chart and reset schedule."""
+        import matplotlib.pyplot as plt
+
+        self.schedule = None
+        if self.canvas is not None:
+            fig = self.canvas.figure
+            self.canvas.get_tk_widget().destroy()
+            plt.close(fig)
+            self.canvas = None
+        if self.toolbar is not None:
+            self.toolbar.destroy()
+            self.toolbar = None
+        if self.toolbar_frame is not None:
+            self.toolbar_frame.destroy()
+            self.toolbar_frame = None
+
     def _on_mode_change(self, mode: str):
         """Handle analysis mode change - update labels accordingly."""
         if mode == "Existing Property":
@@ -469,6 +543,10 @@ class AmortizationTab(ctk.CTkFrame):
             self.mode_help_label.configure(
                 text="Enter current value, equity (value - loan balance), years left"
             )
+            # Hide renovation section - doesn't apply to existing properties
+            self.renovation_var.set(False)
+            self.renovation_frame.pack_forget()
+            self.renovation_check.pack_forget()
         else:
             # Restore labels for new purchase
             self.property_value_entry.set_label("Property Value ($):")
@@ -477,6 +555,8 @@ class AmortizationTab(ctk.CTkFrame):
             self.mode_help_label.configure(
                 text="Analyzing a new property purchase"
             )
+            # Show renovation checkbox (but keep fields collapsed)
+            self.renovation_check.pack(anchor="w", pady=(20, 5))
 
     def is_existing_property_mode(self) -> bool:
         """Return True if analyzing an existing property."""
@@ -499,6 +579,9 @@ class AmortizationTab(ctk.CTkFrame):
         mode = cfg.get("analysis_mode", "New Purchase")
         self.analysis_mode_var.set(mode)
         self._on_mode_change(mode)
+        # Load has_loan setting
+        self.has_loan_var.set(cfg.get("has_loan", True))
+        self._toggle_loan_fields()
         # Load renovation settings
         self.renovation_var.set(cfg.get("renovation_enabled", False))
         self.purchase_price_entry.set(cfg.get("purchase_price", "0"))
@@ -522,6 +605,7 @@ class AmortizationTab(ctk.CTkFrame):
             "closing_costs": self.closing_costs_entry.get(),
             "extra_payment": self.extra_payment_entry.get(),
             "analysis_mode": self.analysis_mode_var.get(),
+            "has_loan": self.has_loan_var.get(),
             # Renovation settings
             "renovation_enabled": self.renovation_var.get(),
             "purchase_price": self.purchase_price_entry.get(),
@@ -580,6 +664,28 @@ class MainApplication(ctk.CTk):
         )
         self.export_btn.pack(side="left", padx=10)
 
+        # Separator
+        separator = ctk.CTkFrame(self.button_frame, width=2, height=40, fg_color="gray50")
+        separator.pack(side="left", padx=15)
+
+        # Analysis Mode selector (prominent placement - changes entire analysis)
+        mode_label = ctk.CTkLabel(
+            self.button_frame,
+            text="Analysis Mode:",
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        mode_label.pack(side="left", padx=(0, 5))
+
+        self.analysis_mode_var = ctk.StringVar(value="New Purchase")
+        self.mode_segment = ctk.CTkSegmentedButton(
+            self.button_frame,
+            values=["New Purchase", "Existing Property"],
+            variable=self.analysis_mode_var,
+            command=self._on_analysis_mode_change,
+            height=40,
+        )
+        self.mode_segment.pack(side="left", padx=(0, 15))
+
         # Status label
         self.status_label = ctk.CTkLabel(
             self.button_frame,
@@ -595,7 +701,7 @@ class MainApplication(ctk.CTk):
 
         # Add tabs - Investment Summary first!
         self.tabview.add("Investment Summary")
-        self.tabview.add("Amortization")
+        self.tabview.add("Property & Loan")
         self.tabview.add("Recurring Costs")
         self.tabview.add("Asset Building")
 
@@ -603,8 +709,8 @@ class MainApplication(ctk.CTk):
         self.investment_summary_tab = InvestmentSummaryTab(self.tabview.tab("Investment Summary"))
         self.investment_summary_tab.pack(fill="both", expand=True)
 
-        # Populate amortization tab
-        self.amortization_tab = AmortizationTab(self.tabview.tab("Amortization"))
+        # Populate property & loan tab (formerly "Amortization")
+        self.amortization_tab = AmortizationTab(self.tabview.tab("Property & Loan"))
         self.amortization_tab.pack(fill="both", expand=True)
 
         # Populate recurring costs tab
@@ -622,16 +728,36 @@ class MainApplication(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _on_close(self):
-        """Handle window close - cleanup matplotlib figures and exit."""
+        """Handle window close - cleanup and exit quickly."""
         import matplotlib.pyplot as plt
 
-        # Close all matplotlib figures to free resources
+        # Cancel any pending after callbacks to prevent delays
+        for after_id in self.tk.call('after', 'info'):
+            try:
+                self.after_cancel(after_id)
+            except Exception:
+                pass
+
+        # Close matplotlib figures without triggering callbacks
         plt.close('all')
 
-        # Quit the mainloop first, then destroy
-        # This prevents "after" callback errors from matplotlib's TkAgg backend
-        self.quit()
+        # Destroy immediately - quit() can cause delays
         self.destroy()
+
+    def _on_analysis_mode_change(self, mode: str):
+        """Handle analysis mode change - propagate to amortization tab and clear all charts."""
+        self.amortization_tab.set_analysis_mode(mode)
+
+        # Clear all charts since mode change invalidates them
+        self.amortization_tab.clear_chart()
+        self.recurring_costs_tab.clear_chart()
+        self.asset_building_tab.clear_chart()
+        self.investment_summary_tab.clear_chart()
+
+        self.status_label.configure(
+            text="Analysis mode changed - click Calculate All to update",
+            text_color="#f39c12"
+        )
 
     def _load_all_config(self):
         """Load saved configuration into all tabs."""
@@ -640,6 +766,11 @@ class MainApplication(ctk.CTk):
         self.recurring_costs_tab.load_config(saved.get("recurring_costs", {}))
         self.asset_building_tab.load_config(saved.get("asset_building", {}))
         self.investment_summary_tab.load_config(saved.get("investment_summary", {}))
+
+        # Sync analysis mode from amortization tab to main toolbar
+        amort_cfg = saved.get("amortization", {})
+        mode = amort_cfg.get("analysis_mode", "New Purchase")
+        self.analysis_mode_var.set(mode)
 
     def _save_all_config(self):
         """Save current field values from all tabs."""
@@ -654,26 +785,42 @@ class MainApplication(ctk.CTk):
     def _calculate_all(self):
         """Run calculations on all tabs with data flow between them."""
         try:
-            # 1. Calculate Amortization first (source of truth for loan data)
-            self.amortization_tab.calculate()
+            # 0. Get holding period first - this controls all chart durations
+            holding_years = self.investment_summary_tab.get_holding_years()
 
-            if self.amortization_tab.schedule is None:
-                self.status_label.configure(text="Error in amortization calculation", text_color="#e74c3c")
-                return
+            # Pass holding period to all tabs for consistent chart durations
+            self.amortization_tab.set_holding_period(holding_years)
+            self.recurring_costs_tab.set_holding_period(holding_years)
+            self.asset_building_tab.set_holding_period(holding_years)
 
             # Extract loan params for other tabs
             loan_params = self.amortization_tab.get_loan_params()
-            schedule = self.amortization_tab.schedule
+            has_loan = self.amortization_tab.has_loan()
 
-            # Check for empty schedule (happens when principal <= 0)
-            if len(schedule.schedule) == 0:
-                self.status_label.configure(
-                    text="Error: Loan amount is zero. Check down payment vs property value.",
-                    text_color="#e74c3c"
-                )
-                return
+            # 1. Calculate Amortization if there's a loan
+            if has_loan:
+                self.amortization_tab.calculate()
 
-            first_payment = schedule.schedule.iloc[0]
+                if self.amortization_tab.schedule is None:
+                    self.status_label.configure(text="Error in amortization calculation", text_color="#e74c3c")
+                    return
+
+                schedule = self.amortization_tab.schedule
+
+                # Check for empty schedule (happens when principal <= 0)
+                if len(schedule.schedule) == 0:
+                    self.status_label.configure(
+                        text="Error: Loan amount is zero. Check down payment vs property value.",
+                        text_color="#e74c3c"
+                    )
+                    return
+
+                first_payment = schedule.schedule.iloc[0]
+                monthly_pi_payment = first_payment['scheduled_payment']
+            else:
+                # No loan - clear the amortization chart and set payment to 0
+                self.amortization_tab.clear_chart()
+                monthly_pi_payment = 0
 
             # 2. Calculate Recurring Costs (source of truth for operating costs)
             self.recurring_costs_tab.set_loan_params(
@@ -697,7 +844,7 @@ class MainApplication(ctk.CTk):
                 loan_amount=loan_params.principal,
                 annual_interest_rate=loan_params.annual_interest_rate,
                 loan_term_years=loan_params.loan_term_years,
-                monthly_pi_payment=first_payment['scheduled_payment'],
+                monthly_pi_payment=monthly_pi_payment,
                 property_taxes_annual=loan_params.property_tax_rate * loan_params.property_value,
                 insurance_annual=loan_params.insurance_annual,
                 hoa_annual=loan_params.hoa_monthly * 12,
@@ -706,6 +853,10 @@ class MainApplication(ctk.CTk):
             self.asset_building_tab.set_operating_costs(
                 maintenance_annual=operating_costs["maintenance_annual"],
                 utilities_annual=operating_costs["utilities_annual"],
+            )
+            # Set analysis mode (existing property or new purchase)
+            self.asset_building_tab.set_analysis_mode(
+                is_existing_property=self.amortization_tab.is_existing_property_mode()
             )
             self.asset_building_tab.calculate()
 
@@ -722,11 +873,11 @@ class MainApplication(ctk.CTk):
                 closing_costs=loan_params.closing_costs,
                 annual_interest_rate=loan_params.annual_interest_rate,
                 loan_term_years=loan_params.loan_term_years,
-                monthly_pi_payment=first_payment['scheduled_payment'],
+                monthly_pi_payment=monthly_pi_payment,
                 property_taxes_annual=loan_params.property_tax_rate * loan_params.property_value,
                 insurance_annual=loan_params.insurance_annual,
                 hoa_annual=loan_params.hoa_monthly * 12,
-                pmi_annual=loan_params.pmi_rate * loan_params.principal if loan_params.loan_to_value > 0.8 else 0,
+                pmi_annual=loan_params.pmi_rate * loan_params.principal if has_loan and loan_params.loan_to_value > 0.8 else 0,
             )
 
             # Pass asset building params (operating costs flow from Recurring Costs → Asset Building → here)
@@ -738,6 +889,9 @@ class MainApplication(ctk.CTk):
                 management_rate=asset_params["management_rate"],
                 maintenance_annual=asset_params["maintenance_annual"],
                 utilities_annual=asset_params["utilities_annual"],
+                # Tax benefits from Asset Building tab
+                marginal_tax_rate=asset_params["marginal_tax_rate"],
+                depreciation_enabled=asset_params["depreciation_enabled"],
             )
 
             # Set analysis mode (existing property or new purchase)

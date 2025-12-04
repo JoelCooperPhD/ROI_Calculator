@@ -72,6 +72,10 @@ class RecurringCostsTab(ctk.CTkFrame):
         self._hoa_monthly = hoa_monthly
         self._loan_term_years = loan_term_years
 
+    def set_holding_period(self, holding_years: int):
+        """Set the holding period for analysis (from Investment Summary tab)."""
+        self._holding_period_years = holding_years
+
     def _create_input_form(self):
         """Create the input form for cost parameters."""
         # Title
@@ -177,6 +181,24 @@ class RecurringCostsTab(ctk.CTkFrame):
         self.toolbar = None
         self.toolbar_frame = None
 
+    def clear_chart(self):
+        """Clear the current chart and reset data."""
+        import matplotlib.pyplot as plt
+
+        self.params = None
+        self.schedule = None
+        if self.canvas is not None:
+            fig = self.canvas.figure
+            self.canvas.get_tk_widget().destroy()
+            plt.close(fig)
+            self.canvas = None
+        if self.toolbar is not None:
+            self.toolbar.destroy()
+            self.toolbar = None
+        if self.toolbar_frame is not None:
+            self.toolbar_frame.destroy()
+            self.toolbar_frame = None
+
     def _get_params(self) -> PropertyCostParameters:
         """Build parameters using data from Amortization tab + local inputs."""
         # Use safe parsing for all inputs
@@ -185,9 +207,12 @@ class RecurringCostsTab(ctk.CTkFrame):
         # Default inflation rate for cost projections (each item can override)
         default_inflation = 0.03
 
+        # Use holding period if set, otherwise fall back to loan term
+        analysis_years = getattr(self, '_holding_period_years', self._loan_term_years)
+
         params = PropertyCostParameters(
             property_value=self._property_value,
-            analysis_years=self._loan_term_years,
+            analysis_years=analysis_years,
             general_inflation_rate=default_inflation,
             maintenance_percent=maintenance_pct,
         )
