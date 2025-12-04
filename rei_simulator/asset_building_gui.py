@@ -132,6 +132,25 @@ class AssetBuildingTab(ctk.CTkFrame):
         )
         self.monthly_rent_entry.pack(fill="x", pady=5)
 
+        self.square_feet_entry = LabeledEntry(
+            self.input_frame, "Square Feet:", ""
+        )
+        self.square_feet_entry.pack(fill="x", pady=5)
+
+        # Small label showing $/sq ft (only visible when sq ft > 0)
+        self.rent_per_sqft_label = ctk.CTkLabel(
+            self.input_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+            anchor="e"
+        )
+        self.rent_per_sqft_label.pack(fill="x", pady=(0, 5))
+
+        # Bind updates to recalculate $/sq ft
+        self.monthly_rent_entry.entry.bind("<KeyRelease>", self._update_rent_per_sqft)
+        self.square_feet_entry.entry.bind("<KeyRelease>", self._update_rent_per_sqft)
+
         self.rent_growth_entry = LabeledEntry(
             self.input_frame, "Annual Rent Growth (%):", "3.0"
         )
@@ -173,6 +192,19 @@ class AssetBuildingTab(ctk.CTkFrame):
             font=ctk.CTkFont(size=14, weight="bold")
         )
         label.pack(anchor="w", pady=(15, 5))
+
+    def _update_rent_per_sqft(self, event=None):
+        """Update the rent per sq ft display (annual basis)."""
+        try:
+            rent = float(self.monthly_rent_entry.get() or 0)
+            sqft = float(self.square_feet_entry.get() or 0)
+            if sqft > 0 and rent > 0:
+                annual_per_sqft = (rent * 12) / sqft
+                self.rent_per_sqft_label.configure(text=f"${annual_per_sqft:.2f}/sq ft/yr")
+            else:
+                self.rent_per_sqft_label.configure(text="")
+        except ValueError:
+            self.rent_per_sqft_label.configure(text="")
 
     def _create_plot_area(self):
         """Create the plot selection and display area."""
@@ -273,17 +305,20 @@ class AssetBuildingTab(ctk.CTkFrame):
         """Load field values from config."""
         self.appreciation_rate_entry.set(cfg.get("appreciation_rate", "3.0"))
         self.monthly_rent_entry.set(cfg.get("monthly_rent", "0"))
+        self.square_feet_entry.set(cfg.get("square_feet", ""))
         self.rent_growth_entry.set(cfg.get("rent_growth", "3.0"))
         self.vacancy_rate_entry.set(cfg.get("vacancy_rate", "5.0"))
         self.management_rate_entry.set(cfg.get("management_rate", "0"))
         self.tax_rate_entry.set(cfg.get("tax_rate", "0"))
         self.depreciation_var.set(cfg.get("depreciation_enabled", False))
+        self._update_rent_per_sqft()
 
     def save_config(self) -> dict:
         """Save current field values to config dict."""
         return {
             "appreciation_rate": self.appreciation_rate_entry.get(),
             "monthly_rent": self.monthly_rent_entry.get(),
+            "square_feet": self.square_feet_entry.get(),
             "rent_growth": self.rent_growth_entry.get(),
             "vacancy_rate": self.vacancy_rate_entry.get(),
             "management_rate": self.management_rate_entry.get(),

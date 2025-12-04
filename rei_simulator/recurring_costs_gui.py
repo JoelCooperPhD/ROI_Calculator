@@ -328,10 +328,14 @@ class RecurringCostsTab(ctk.CTkFrame):
         if plot_type == "True Cost Waterfall":
             fig = self._create_waterfall_plot()
         elif plot_type == "CapEx Items Breakdown":
+            if self.params is None:
+                return
             fig = rc_plots.plot_capex_items_breakdown(self.params)
         elif plot_type == "Costs by Category":
             fig = rc_plots.plot_costs_by_category(self.schedule)
         elif plot_type == "Closing Costs Breakdown":
+            if self.params is None:
+                return
             fig = rc_plots.plot_closing_costs_breakdown(self.params.closing_costs)
         else:
             fig = self._create_waterfall_plot()
