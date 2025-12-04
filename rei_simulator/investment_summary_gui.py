@@ -459,6 +459,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
 
         self.canvas = None
         self.toolbar = None
+        self.toolbar_frame = None
 
     def _update_plot_options(self):
         """Update available plot options based on analysis mode."""
@@ -577,13 +578,15 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         if self.summary is None:
             return
 
-        # Clear existing canvas and close the figure to free memory
+        # Clear existing canvas, toolbar frame, and close the figure to free memory
         if self.canvas is not None:
             fig = self.canvas.figure
             self.canvas.get_tk_widget().destroy()
             plt.close(fig)
         if self.toolbar is not None:
             self.toolbar.destroy()
+        if self.toolbar_frame is not None:
+            self.toolbar_frame.destroy()
 
         # Create new figure based on selection
         plot_type = self.plot_var.get()
@@ -612,9 +615,9 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
         # Add toolbar
-        toolbar_frame = ctk.CTkFrame(self.canvas_frame, fg_color="transparent")
-        toolbar_frame.pack(fill="x")
-        self.toolbar = NavigationToolbar2Tk(self.canvas, toolbar_frame)
+        self.toolbar_frame = ctk.CTkFrame(self.canvas_frame, fg_color="transparent")
+        self.toolbar_frame.pack(fill="x")
+        self.toolbar = NavigationToolbar2Tk(self.canvas, self.toolbar_frame)
         self.toolbar.update()
 
     def load_config(self, cfg: dict) -> None:
