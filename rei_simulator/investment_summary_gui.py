@@ -233,7 +233,18 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self._create_section_header("Sale Costs")
 
         self.selling_cost_entry = LabeledEntry(
-            self.input_frame, "Agent Commission + Closing (%):", "6.0"
+            self.input_frame,
+            "Agent Commission + Closing (%):",
+            "6.0",
+            tooltip=(
+                "Total costs when you sell the property:\n\n"
+                "• Agent commission: Typically 5-6% split between "
+                "buyer's and seller's agents\n\n"
+                "• Seller closing costs: Title insurance, transfer taxes, "
+                "attorney fees, etc. (~1-2%)\n\n"
+                "Default 6% is a reasonable estimate for most markets."
+            ),
+            tooltip_title="Agent Commission + Closing Costs",
         )
         self.selling_cost_entry.pack(fill="x", pady=5)
 
@@ -241,7 +252,18 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self._create_section_header("Compare To")
 
         self.alternative_return_entry = LabeledEntry(
-            self.input_frame, "S&P 500 Nominal (%):", "10.0"
+            self.input_frame,
+            "S&P 500 Nominal (%):",
+            "10.0",
+            tooltip=(
+                "Expected annual return for alternative investment "
+                "(S&P 500 index fund).\n\n"
+                "• 10% is the historical average nominal return\n"
+                "• ~7% after adjusting for inflation\n\n"
+                "Used to compare: would your money grow faster "
+                "in the stock market or in this property?"
+            ),
+            tooltip_title="Alternative Investment Return",
         )
         self.alternative_return_entry.pack(fill="x", pady=5)
 
@@ -268,7 +290,19 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         info_btn.pack(anchor="w", padx=(185, 0), pady=(2, 0))
 
         self.initial_reserves_entry = LabeledEntry(
-            self.input_frame, "Initial Cash Reserves ($):", "10000"
+            self.input_frame,
+            "Initial Cash Reserves ($):",
+            "10000",
+            tooltip=(
+                "Cash you set aside for emergencies and unexpected "
+                "expenses when purchasing the property.\n\n"
+                "• Covers unexpected repairs, vacancies, etc.\n"
+                "• Typically 3-6 months of expenses recommended\n"
+                "• Included in total cash invested calculation\n\n"
+                "This is added to down payment + closing costs "
+                "when calculating your total cash investment."
+            ),
+            tooltip_title="Initial Cash Reserves",
         )
         self.initial_reserves_entry.pack(fill="x", pady=5)
 
@@ -433,12 +467,12 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         plot_label = ctk.CTkLabel(select_frame, text="Select View:")
         plot_label.pack(side="left", padx=(10, 10))
 
-        self.plot_var = ctk.StringVar(value="Investment Dashboard")
+        self.plot_var = ctk.StringVar(value="Property vs S&P 500")
         self._new_purchase_plots = [
-            "Investment Dashboard",        # The big picture
-            "vs Alternative Investments",  # Should I buy this or invest in stocks?
+            "Property vs S&P 500",         # Should I buy this or invest in stocks?
             "Profit Over Time",            # When do I break even?
-            "Holding Period Analysis",     # How long should I hold?
+            "Annual Cash Flow",            # Cash flow each year
+            "Equity Growth",               # Equity vs loan balance
         ]
         self._existing_property_plots = [
             "Sell Now vs Hold",            # Should I sell or keep holding?
@@ -490,7 +524,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             default_value = "Sell Now vs Hold"
         else:
             new_values = self._new_purchase_plots
-            default_value = "Investment Dashboard"
+            default_value = "Property vs S&P 500"
 
         self.plot_menu.configure(values=new_values)
         self.plot_var.set(default_value)
@@ -616,9 +650,14 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         plot_type = self.plot_var.get()
 
         plot_functions = {
+            # New Purchase mode plots (simple single charts)
+            "Property vs S&P 500": plots.plot_investment_comparison,
+            "Profit Over Time": plots.plot_profit_timeline,
+            "Annual Cash Flow": plots.plot_annual_cash_flow,
+            "Equity Growth": plots.plot_equity_vs_loan,
+            # Existing Property mode plots
             "Investment Dashboard": plots.plot_investment_dashboard,
             "vs Alternative Investments": plots.plot_investment_comparison,
-            "Profit Over Time": plots.plot_profit_timeline,
         }
 
         if plot_type == "Holding Period Analysis":

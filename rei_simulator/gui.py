@@ -77,7 +77,18 @@ class AmortizationTab(ctk.CTkFrame):
         property_section.pack(anchor="w", pady=(10, 5))
 
         self.property_value_entry = LabeledEntry(
-            self.input_frame, "Property Value ($):", "400000"
+            self.input_frame,
+            "Property Value ($):",
+            "400000",
+            tooltip=(
+                "The market value of the property.\n\n"
+                "• For new purchases: the purchase price\n"
+                "• For renovations: the ARV (After Repair Value)\n"
+                "• For existing properties: current market value\n\n"
+                "This is used for appreciation calculations "
+                "and LTV (loan-to-value) ratio."
+            ),
+            tooltip_title="Property Value",
         )
         self.property_value_entry.pack(fill="x", pady=5)
 
@@ -98,17 +109,50 @@ class AmortizationTab(ctk.CTkFrame):
         ownership_note.pack(anchor="w")
 
         self.property_tax_entry = LabeledEntry(
-            self.input_frame, "Property Tax Rate (%):", "1.2"
+            self.input_frame,
+            "Property Tax Rate (%):",
+            "1.2",
+            tooltip=(
+                "Annual property tax as a percentage of property value.\n\n"
+                "• National average is ~1.1%\n"
+                "• Varies widely: 0.3% (Hawaii) to 2.5% (New Jersey)\n"
+                "• Check your county assessor's website\n\n"
+                "Some areas reassess on sale, which may "
+                "increase taxes significantly."
+            ),
+            tooltip_title="Property Tax Rate",
         )
         self.property_tax_entry.pack(fill="x", pady=5)
 
         self.insurance_entry = LabeledEntry(
-            self.input_frame, "Annual Insurance ($):", "1800"
+            self.input_frame,
+            "Annual Insurance ($):",
+            "1800",
+            tooltip=(
+                "Annual homeowners/landlord insurance premium.\n\n"
+                "• $1,500-2,500/year is typical\n"
+                "• Higher in disaster-prone areas\n"
+                "• Landlord policies cost 15-25% more\n\n"
+                "Get quotes from multiple insurers. "
+                "Consider umbrella policy for rentals."
+            ),
+            tooltip_title="Annual Insurance",
         )
         self.insurance_entry.pack(fill="x", pady=5)
 
         self.hoa_entry = LabeledEntry(
-            self.input_frame, "Monthly HOA ($):", "0"
+            self.input_frame,
+            "Monthly HOA ($):",
+            "0",
+            tooltip=(
+                "Monthly Homeowners Association fee.\n\n"
+                "• $0 for most single-family homes\n"
+                "• $200-500/month for condos\n"
+                "• Can be $1,000+ for luxury buildings\n\n"
+                "Check what HOA covers - may include "
+                "insurance, water, trash, exterior maintenance."
+            ),
+            tooltip_title="Monthly HOA",
         )
         self.hoa_entry.pack(fill="x", pady=5)
 
@@ -125,7 +169,7 @@ class AmortizationTab(ctk.CTkFrame):
         self.has_loan_check.pack(anchor="w", pady=(20, 5))
 
         # Loan details frame (can be shown/hidden)
-        self.loan_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
+        self.loan_frame = ctk.CTkFrame(self.input_frame, fg_color="#1a1a2e")
         self.loan_frame.pack(fill="x", pady=5)
 
         # Core loan parameters
@@ -134,26 +178,58 @@ class AmortizationTab(ctk.CTkFrame):
             text="Loan Details",
             font=ctk.CTkFont(size=12, weight="bold")
         )
-        self.section_label.pack(anchor="w", pady=(5, 5))
+        self.section_label.pack(anchor="w", pady=(5, 5), padx=10)
 
         self.down_payment_entry = LabeledEntry(
-            self.loan_frame, "Down Payment ($):", "80000"
+            self.loan_frame,
+            "Down Payment ($):",
+            "80000",
+            tooltip=(
+                "Cash you pay upfront toward the purchase.\n\n"
+                "• 20% down avoids PMI\n"
+                "• 3-5% minimum for conventional loans\n"
+                "• Investment properties often require 20-25%\n\n"
+                "Larger down payment = lower monthly payment "
+                "and less interest over time."
+            ),
+            tooltip_title="Down Payment",
         )
-        self.down_payment_entry.pack(fill="x", pady=5)
+        self.down_payment_entry.pack(fill="x", pady=5, padx=10)
 
         self.interest_rate_entry = LabeledEntry(
-            self.loan_frame, "Annual Interest Rate (%):", "6.5"
+            self.loan_frame,
+            "Annual Interest Rate (%):",
+            "6.5",
+            tooltip=(
+                "Annual interest rate on your mortgage.\n\n"
+                "• Rates vary by credit score and loan type\n"
+                "• Investment properties are 0.5-0.75% higher\n"
+                "• Check current rates at Bankrate or similar\n\n"
+                "Even small rate differences significantly "
+                "impact total interest paid."
+            ),
+            tooltip_title="Interest Rate",
         )
-        self.interest_rate_entry.pack(fill="x", pady=5)
+        self.interest_rate_entry.pack(fill="x", pady=5, padx=10)
 
         self.loan_term_entry = LabeledEntry(
-            self.loan_frame, "Loan Term (years):", "30"
+            self.loan_frame,
+            "Loan Term (years):",
+            "30",
+            tooltip=(
+                "Length of the mortgage in years.\n\n"
+                "• 30-year: Lower payments, more total interest\n"
+                "• 15-year: Higher payments, less total interest\n"
+                "• 15-year rates are typically 0.5-0.75% lower\n\n"
+                "For existing properties, enter years remaining."
+            ),
+            tooltip_title="Loan Term",
         )
-        self.loan_term_entry.pack(fill="x", pady=5)
+        self.loan_term_entry.pack(fill="x", pady=5, padx=10)
 
         # Payment frequency
         freq_frame = ctk.CTkFrame(self.loan_frame, fg_color="transparent")
-        freq_frame.pack(fill="x", pady=5)
+        freq_frame.pack(fill="x", pady=5, padx=10)
 
         freq_label = ctk.CTkLabel(freq_frame, text="Payment Frequency:", anchor="w", width=180)
         freq_label.pack(side="left", padx=(0, 10))
@@ -173,12 +249,23 @@ class AmortizationTab(ctk.CTkFrame):
             text="Loan Costs",
             font=ctk.CTkFont(size=12, weight="bold")
         )
-        loan_costs_label.pack(anchor="w", pady=(15, 5))
+        loan_costs_label.pack(anchor="w", pady=(15, 5), padx=10)
 
         self.pmi_rate_entry = LabeledEntry(
-            self.loan_frame, "PMI Rate (%):", "0.5"
+            self.loan_frame,
+            "PMI Rate (%):",
+            "0.5",
+            tooltip=(
+                "Private Mortgage Insurance rate (annual).\n\n"
+                "• Required when LTV > 80% (less than 20% down)\n"
+                "• Typically 0.3-1.5% of loan amount per year\n"
+                "• Can be removed once LTV reaches 80%\n\n"
+                "PMI protects the lender, not you. "
+                "Avoid it with 20%+ down payment."
+            ),
+            tooltip_title="PMI Rate",
         )
-        self.pmi_rate_entry.pack(fill="x", pady=5)
+        self.pmi_rate_entry.pack(fill="x", pady=5, padx=10)
 
         pmi_note = ctk.CTkLabel(
             self.loan_frame,
@@ -186,12 +273,24 @@ class AmortizationTab(ctk.CTkFrame):
             font=ctk.CTkFont(size=10),
             text_color="gray"
         )
-        pmi_note.pack(anchor="w", padx=(190, 0))
+        pmi_note.pack(anchor="w", padx=(200, 0))
 
         self.closing_costs_entry = LabeledEntry(
-            self.loan_frame, "Closing Costs ($):", "8000"
+            self.loan_frame,
+            "Closing Costs ($):",
+            "8000",
+            tooltip=(
+                "One-time costs to finalize the purchase.\n\n"
+                "• Lender fees, title insurance, appraisal, "
+                "attorney, escrow, recording fees\n"
+                "• Estimate 2-5% of purchase price\n"
+                "• Example: $8,000-20,000 on a $400k home\n\n"
+                "Ask lender for a Loan Estimate to get "
+                "the actual itemized amount."
+            ),
+            tooltip_title="Closing Costs",
         )
-        self.closing_costs_entry.pack(fill="x", pady=5)
+        self.closing_costs_entry.pack(fill="x", pady=5, padx=10)
 
         closing_note = ctk.CTkLabel(
             self.loan_frame,
@@ -199,7 +298,7 @@ class AmortizationTab(ctk.CTkFrame):
             font=ctk.CTkFont(size=10),
             text_color="gray"
         )
-        closing_note.pack(anchor="w", padx=(190, 0))
+        closing_note.pack(anchor="w", padx=(200, 0))
 
         # Extra payments section
         extra_label = ctk.CTkLabel(
@@ -207,12 +306,23 @@ class AmortizationTab(ctk.CTkFrame):
             text="Extra Payments",
             font=ctk.CTkFont(size=12, weight="bold")
         )
-        extra_label.pack(anchor="w", pady=(15, 5))
+        extra_label.pack(anchor="w", pady=(15, 5), padx=10)
 
         self.extra_payment_entry = LabeledEntry(
-            self.loan_frame, "Extra Monthly Payment ($):", "0"
+            self.loan_frame,
+            "Extra Monthly Payment ($):",
+            "0",
+            tooltip=(
+                "Additional principal payment each month.\n\n"
+                "• Goes directly to principal, not interest\n"
+                "• Reduces total interest paid\n"
+                "• Shortens loan payoff time\n\n"
+                "Even $100-200 extra can save thousands "
+                "in interest and years off the loan."
+            ),
+            tooltip_title="Extra Payment",
         )
-        self.extra_payment_entry.pack(fill="x", pady=5)
+        self.extra_payment_entry.pack(fill="x", pady=5, padx=10)
 
         # Renovation/Rehab section (collapsible)
         self._create_renovation_section()
@@ -223,6 +333,13 @@ class AmortizationTab(ctk.CTkFrame):
             self.loan_frame.pack(fill="x", pady=5, after=self.has_loan_check)
         else:
             self.loan_frame.pack_forget()
+        # Update label if in existing property mode
+        if self.is_existing_property_mode():
+            if self.has_loan_var.get():
+                self.down_payment_entry.set_label("Remaining Loan Balance ($):")
+            else:
+                self.down_payment_entry.set_label("Current Equity ($):")
+            self._update_existing_property_help_text()
 
 
     def _create_plot_area(self):
@@ -278,7 +395,18 @@ class AmortizationTab(ctk.CTkFrame):
 
         # Purchase Price (what you're paying - for loan calculation)
         self.purchase_price_entry = LabeledEntry(
-            self.renovation_frame, "Purchase Price ($):", "0"
+            self.renovation_frame,
+            "Purchase Price ($):",
+            "0",
+            tooltip=(
+                "What you're actually paying for the property.\n\n"
+                "• Different from ARV (After Repair Value)\n"
+                "• Loan amount is based on this price\n"
+                "• Often lower for distressed properties\n\n"
+                "Example: Buy for $300k, renovate for $50k, "
+                "ARV is $400k."
+            ),
+            tooltip_title="Purchase Price",
         )
         self.purchase_price_entry.pack(fill="x", pady=5, padx=10)
 
@@ -292,19 +420,50 @@ class AmortizationTab(ctk.CTkFrame):
 
         # Renovation cost
         self.renovation_cost_entry = LabeledEntry(
-            self.renovation_frame, "Renovation Cost ($):", "0"
+            self.renovation_frame,
+            "Renovation Cost ($):",
+            "0",
+            tooltip=(
+                "Total budget for renovation/rehab.\n\n"
+                "• Include materials, labor, permits\n"
+                "• Add 10-20% contingency for surprises\n"
+                "• Get multiple contractor quotes\n\n"
+                "This is added to your total cash investment."
+            ),
+            tooltip_title="Renovation Cost",
         )
         self.renovation_cost_entry.pack(fill="x", pady=5, padx=10)
 
         # Renovation duration
         self.renovation_duration_entry = LabeledEntry(
-            self.renovation_frame, "Duration (months):", "3"
+            self.renovation_frame,
+            "Duration (months):",
+            "3",
+            tooltip=(
+                "How long the renovation will take.\n\n"
+                "• Cosmetic updates: 1-2 months\n"
+                "• Kitchen/bath remodel: 2-4 months\n"
+                "• Major renovation: 4-6+ months\n\n"
+                "During this time, rental income is reduced "
+                "(see Rent During Rehab below)."
+            ),
+            tooltip_title="Renovation Duration",
         )
         self.renovation_duration_entry.pack(fill="x", pady=5, padx=10)
 
         # Rent during renovation
         self.rent_during_reno_entry = LabeledEntry(
-            self.renovation_frame, "Rent During Rehab (%):", "0"
+            self.renovation_frame,
+            "Rent During Rehab (%):",
+            "0",
+            tooltip=(
+                "Percentage of normal rent collected during renovation.\n\n"
+                "• 0% = property vacant during rehab\n"
+                "• 50% = partial rent (tenant stays)\n"
+                "• 100% = full rent (minor work)\n\n"
+                "Most major renovations require vacancy."
+            ),
+            tooltip_title="Rent During Rehab",
         )
         self.rent_during_reno_entry.pack(fill="x", pady=5, padx=10)
 
@@ -409,13 +568,20 @@ class AmortizationTab(ctk.CTkFrame):
             )
 
         # Has loan - parse loan-specific fields
-        down_payment = safe_positive_float(self.down_payment_entry.get(), 0.0)
+        field_value = safe_positive_float(self.down_payment_entry.get(), 0.0)
 
-        # Loan is based on purchase price, NOT ARV
-        # Ensure down payment doesn't exceed purchase price
-        down_payment = min(down_payment, purchase_price)
-        principal = purchase_price - down_payment
-        # Ensure principal is non-negative (should be guaranteed by above, but extra safety)
+        # In existing property mode, user enters loan balance directly
+        # In new purchase mode, user enters down payment
+        if self.is_existing_property_mode():
+            # Field contains remaining loan balance
+            principal = min(field_value, purchase_price)  # Can't owe more than property value
+            down_payment = purchase_price - principal  # Calculate equity as "down payment"
+        else:
+            # Field contains down payment
+            down_payment = min(field_value, purchase_price)
+            principal = purchase_price - down_payment
+
+        # Ensure principal is non-negative
         principal = max(0, principal)
 
         freq_map = {
@@ -537,12 +703,14 @@ class AmortizationTab(ctk.CTkFrame):
         if mode == "Existing Property":
             # Relabel for existing property analysis
             self.property_value_entry.set_label("Current Market Value ($):")
-            self.down_payment_entry.set_label("Current Equity ($):")
+            # Label depends on whether property has a loan
+            if self.has_loan_var.get():
+                self.down_payment_entry.set_label("Remaining Loan Balance ($):")
+            else:
+                self.down_payment_entry.set_label("Current Equity ($):")
             self.loan_term_entry.set_label("Years Remaining:")
             self.closing_costs_entry.set("0")
-            self.mode_help_label.configure(
-                text="Enter current value, equity (value - loan balance), years left"
-            )
+            self._update_existing_property_help_text()
             # Hide renovation section - doesn't apply to existing properties
             self.renovation_var.set(False)
             self.renovation_frame.pack_forget()
@@ -561,6 +729,17 @@ class AmortizationTab(ctk.CTkFrame):
     def is_existing_property_mode(self) -> bool:
         """Return True if analyzing an existing property."""
         return self.analysis_mode_var.get() == "Existing Property"
+
+    def _update_existing_property_help_text(self):
+        """Update help text based on loan status in existing property mode."""
+        if self.has_loan_var.get():
+            self.mode_help_label.configure(
+                text="Enter current value, loan balance, years remaining"
+            )
+        else:
+            self.mode_help_label.configure(
+                text="Enter current value and equity (owned free and clear)"
+            )
 
     def load_config(self, cfg: dict) -> None:
         """Load field values from config."""
@@ -986,6 +1165,7 @@ class MainApplication(ctk.CTk):
                 recurring_costs=self.recurring_costs_tab.schedule,
                 asset_building=self.asset_building_tab.schedule,
                 investment_summary=self.investment_summary_tab.summary,
+                sell_now_analysis=self.investment_summary_tab.sell_now_analysis,
             )
 
             # Generate and open report
