@@ -181,7 +181,6 @@ class RecurringCostsTab(ctk.CTkFrame):
                 "True Cost Waterfall",     # What's my REAL monthly cost?
                 "CapEx Items Breakdown",   # What needs replacing soon?
                 "Costs by Category",       # What's driving my costs?
-                "Closing Costs Breakdown", # How much cash at closing?
             ],
             command=self._update_plot,
             width=200
@@ -292,10 +291,6 @@ class RecurringCostsTab(ctk.CTkFrame):
         if self.use_default_capex_var.get():
             params.add_default_capex_items()
 
-        # Closing costs (based on loan amount from Amortization)
-        if self._loan_amount > 0:
-            params.estimate_closing_costs(self._loan_amount)
-
         return params
 
     def calculate(self):
@@ -338,10 +333,6 @@ class RecurringCostsTab(ctk.CTkFrame):
             fig = rc_plots.plot_capex_items_breakdown(self.params)
         elif plot_type == "Costs by Category":
             fig = rc_plots.plot_costs_by_category(self.schedule)
-        elif plot_type == "Closing Costs Breakdown":
-            if self.params is None:
-                return
-            fig = rc_plots.plot_closing_costs_breakdown(self.params.closing_costs)
         else:
             fig = self._create_waterfall_plot()
 

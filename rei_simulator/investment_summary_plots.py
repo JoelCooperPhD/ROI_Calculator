@@ -390,11 +390,11 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     """
     Comprehensive 4-panel dashboard with key metrics and visualizations.
     """
-    fig = plt.figure(figsize=(16, 12))
+    fig = plt.figure(figsize=(12, 9))
     fig.patch.set_facecolor("#1a1a2e")
 
-    # Create grid
-    gs = fig.add_gridspec(3, 2, height_ratios=[0.8, 1, 1], hspace=0.3, wspace=0.2)
+    # Create grid with more spacing
+    gs = fig.add_gridspec(3, 2, height_ratios=[0.6, 1, 1], hspace=0.4, wspace=0.3)
 
     # Top panel - Key metrics
     ax_metrics = fig.add_subplot(gs[0, :])
@@ -410,15 +410,20 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
         ("Grade", summary.grade.split(" - ")[0], COLORS["warning"]),
     ]
 
+    # Position metrics evenly with smaller font sizes for better fit
+    num_metrics = len(metrics)
+    spacing = 0.8 / num_metrics  # Use 80% of width
+    start_x = 0.1 + spacing / 2
+
     for i, (label, value, color) in enumerate(metrics):
-        x = 0.1 + i * 0.18
-        ax_metrics.text(x, 0.7, value, fontsize=24, fontweight="bold", color=color,
+        x = start_x + i * spacing
+        ax_metrics.text(x, 0.65, value, fontsize=16, fontweight="bold", color=color,
                        ha="center", transform=ax_metrics.transAxes)
-        ax_metrics.text(x, 0.3, label, fontsize=12, color="white",
+        ax_metrics.text(x, 0.25, label, fontsize=9, color="white",
                        ha="center", transform=ax_metrics.transAxes)
 
     ax_metrics.set_title(f"Investment Summary - {summary.params.holding_period_years} Year Hold",
-                        fontsize=18, fontweight="bold", color="white", pad=20)
+                        fontsize=14, fontweight="bold", color="white", pad=10)
 
     # Bottom left - Profit timeline
     ax_timeline = fig.add_subplot(gs[1, 0])
@@ -426,15 +431,16 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
 
     years = [p.year for p in summary.yearly_projections]
     profits = [p.total_profit for p in summary.yearly_projections]
-    ax_timeline.plot(years, profits, color=COLORS["primary"], linewidth=2, marker="o", markersize=4)
+    ax_timeline.plot(years, profits, color=COLORS["primary"], linewidth=2, marker="o", markersize=3)
     ax_timeline.fill_between(years, profits, 0, alpha=0.3,
                              where=[p >= 0 for p in profits], color=COLORS["profit"])
     ax_timeline.fill_between(years, profits, 0, alpha=0.3,
                              where=[p < 0 for p in profits], color=COLORS["loss"])
     ax_timeline.axhline(y=0, color="white", linestyle="--", alpha=0.5)
-    ax_timeline.set_xlabel("Year", fontsize=10)
-    ax_timeline.set_ylabel("Profit ($)", fontsize=10)
-    ax_timeline.set_title("Profit Over Time", fontsize=12, fontweight="bold")
+    ax_timeline.set_xlabel("Year", fontsize=8)
+    ax_timeline.set_ylabel("Profit ($)", fontsize=8)
+    ax_timeline.set_title("Profit Over Time", fontsize=10, fontweight="bold")
+    ax_timeline.tick_params(axis='both', labelsize=7)
     ax_timeline.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 
     # Bottom right - Comparison (with matched cash flows)
@@ -462,10 +468,11 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
 
     ax_compare.plot(years_full, investment_values, color=COLORS["primary"], linewidth=2, label="Property")
     ax_compare.plot(years_full, sp500_matched, color=COLORS["alternative"], linewidth=2, label="S&P (matched)")
-    ax_compare.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=9)
-    ax_compare.set_xlabel("Year", fontsize=10)
-    ax_compare.set_ylabel("Value ($)", fontsize=10)
-    ax_compare.set_title("vs S&P (Matched Cash Flows)", fontsize=12, fontweight="bold")
+    ax_compare.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=7)
+    ax_compare.set_xlabel("Year", fontsize=8)
+    ax_compare.set_ylabel("Value ($)", fontsize=8)
+    ax_compare.set_title("vs S&P (Matched Cash Flows)", fontsize=10, fontweight="bold")
+    ax_compare.tick_params(axis='both', labelsize=7)
     ax_compare.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 
     # Cash flow bar chart
@@ -476,9 +483,10 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     colors = [COLORS["profit"] if cf >= 0 else COLORS["loss"] for cf in cash_flows]
     ax_cashflow.bar(years, cash_flows, color=colors, edgecolor="white", linewidth=0.5)
     ax_cashflow.axhline(y=0, color="white", linewidth=0.5)
-    ax_cashflow.set_xlabel("Year", fontsize=10)
-    ax_cashflow.set_ylabel("Cash Flow ($)", fontsize=10)
-    ax_cashflow.set_title("Annual Cash Flow", fontsize=12, fontweight="bold")
+    ax_cashflow.set_xlabel("Year", fontsize=8)
+    ax_cashflow.set_ylabel("Cash Flow ($)", fontsize=8)
+    ax_cashflow.set_title("Annual Cash Flow", fontsize=10, fontweight="bold")
+    ax_cashflow.tick_params(axis='both', labelsize=7)
     ax_cashflow.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 
     # Equity growth
@@ -492,10 +500,11 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     ax_equity.fill_between(years, 0, loan_balance, alpha=0.7, color=COLORS["accent"], label="Loan")
     ax_equity.fill_between(years, loan_balance, property_value, alpha=0.7, color=COLORS["equity"], label="Equity")
     ax_equity.plot(years, property_value, color=COLORS["primary"], linewidth=2)
-    ax_equity.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=9)
-    ax_equity.set_xlabel("Year", fontsize=10)
-    ax_equity.set_ylabel("Value ($)", fontsize=10)
-    ax_equity.set_title("Equity Growth", fontsize=12, fontweight="bold")
+    ax_equity.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=7)
+    ax_equity.set_xlabel("Year", fontsize=8)
+    ax_equity.set_ylabel("Value ($)", fontsize=8)
+    ax_equity.set_title("Equity Growth", fontsize=10, fontweight="bold")
+    ax_equity.tick_params(axis='both', labelsize=7)
     ax_equity.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 
     return fig
@@ -645,8 +654,8 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
     Plot comparing sell now and invest in stocks vs holding the property.
 
     Shows two lines:
-    - "Sell Now" line: What your equity would be worth if sold today and invested in stocks
-    - "Hold" line: What you'd have if you held (sale proceeds + cumulative cash flow)
+    - "Sell Now" line: Net proceeds invested in S&P with compound growth
+    - "Hold" line: Net sale proceeds + cumulative cash flow if sold at that year
     """
     fig, ax = plt.subplots(figsize=(12, 7))
     _setup_dark_style(fig, ax)
@@ -658,9 +667,9 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
 
     # Plot both scenarios
     ax.plot(years, sell_now_values, color=COLORS["alternative"], linewidth=2.5,
-            marker="s", markersize=6, label="Sell Now & Invest in S&P 500")
+            marker="s", markersize=6, label="Sell Now & Invest in S&P")
     ax.plot(years, hold_values, color=COLORS["primary"], linewidth=2.5,
-            marker="o", markersize=6, label="Continue Holding Property")
+            marker="o", markersize=6, label="Hold & Sell Later")
 
     # Fill between to show which is better
     ax.fill_between(years, sell_now_values, hold_values, alpha=0.3,
@@ -708,8 +717,14 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
             verticalalignment="top", color=recommendation_color,
             bbox=dict(boxstyle="round", facecolor="#2c3e50", edgecolor=recommendation_color))
 
+    # Add methodology note
+    ax.text(0.98, 0.02, "Sell Now = S&P compound growth\nHold = sale proceeds + cumulative cash flow",
+            transform=ax.transAxes, fontsize=8, color="gray",
+            verticalalignment="bottom", horizontalalignment="right",
+            style="italic")
+
     ax.set_xlabel("Years from Now", fontsize=12)
-    ax.set_ylabel("Total Value ($)", fontsize=12)
+    ax.set_ylabel("Total Accumulated Wealth ($)", fontsize=12)
     ax.set_title("Sell Now vs. Continue Holding", fontsize=14, fontweight="bold")
     ax.legend(loc="lower right", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x:,.0f}"))

@@ -432,7 +432,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             "vs Alternative Investments",  # Should I buy this or invest in stocks?
             "Profit Over Time",            # When do I break even?
             "Holding Period Analysis",     # How long should I hold?
-            "Sensitivity Analysis",        # What if assumptions are wrong?
         ]
         self._existing_property_plots = [
             "Sell Now vs Hold",            # Should I sell or keep holding?
@@ -440,7 +439,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             "vs Alternative Investments",  # Continue holding vs stocks
             "Profit Over Time",            # When do I break even if I keep holding?
             "Holding Period Analysis",     # How long should I hold before selling?
-            "Sensitivity Analysis",        # What if assumptions are wrong?
         ]
         self.plot_menu = ctk.CTkOptionMenu(
             select_frame,
@@ -595,7 +593,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             "Investment Dashboard": plots.plot_investment_dashboard,
             "vs Alternative Investments": plots.plot_investment_comparison,
             "Profit Over Time": plots.plot_profit_timeline,
-            "Sensitivity Analysis": plots.plot_sensitivity_tornado,
         }
 
         if plot_type == "Holding Period Analysis":

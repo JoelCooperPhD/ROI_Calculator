@@ -671,6 +671,12 @@ def generate_sell_now_vs_hold_analysis(
 
     This is specifically for existing property owners asking "should I sell?"
 
+    Comparison methodology:
+    - Sell Now: Take net proceeds (equity minus selling costs), invest in S&P,
+      let it compound with no withdrawals
+    - Hold: Continue holding the property, accumulating cash flows, then sell
+      at the end. Total value = sale proceeds + cumulative cash flow
+
     Args:
         params: Investment parameters for the property
         current_equity: Current equity (property value - loan balance)
@@ -681,30 +687,64 @@ def generate_sell_now_vs_hold_analysis(
     selling_costs_now = current_property_value * params.selling_cost_percent
     net_proceeds_if_sell_now = current_equity - selling_costs_now
 
+    # Generate hold scenario projections for the full analysis period (more efficient)
+    params_full = InvestmentParameters(**vars(params))
+    params_full.holding_period_years = analysis_years
+    hold_summary_full = generate_investment_summary(params_full)
+
     comparison_data = []
 
+    # Track S&P balance with matched cash flows
+    s_and_p_balance = net_proceeds_if_sell_now
+
+    # Year 0: Starting point (today)
+    # Sell Now: You have net proceeds in hand
+    # Hold: You have current equity (but selling costs would apply if you sold)
+    # For fair comparison at year 0: both start at net_proceeds_if_sell_now
+    # (Hold value at year 0 = what you'd get if you sold today = same as Sell)
+    comparison_data.append({
+        "year": 0,
+        "sell_now_value": net_proceeds_if_sell_now,
+        "sell_sp_balance": net_proceeds_if_sell_now,
+        "hold_sale_proceeds": net_proceeds_if_sell_now,  # Same as sell - it's today
+        "hold_cash_flow": 0,
+        "hold_cumulative_cash_flow": 0,
+        "hold_total_outcome": net_proceeds_if_sell_now,
+        "difference": 0,
+        "better_option": "Equal",
+    })
+
     for year in range(1, analysis_years + 1):
-        # SCENARIO A: Sell now, invest proceeds in stocks
-        sell_now_future_value = net_proceeds_if_sell_now * ((1 + params.alternative_return_rate) ** year)
+        # Get Hold projection for this year
+        hold_proj = hold_summary_full.yearly_projections[year - 1]
 
-        # SCENARIO B: Hold the property for 'year' more years
-        params_copy = InvestmentParameters(**vars(params))
-        params_copy.holding_period_years = year
-        hold_summary = generate_investment_summary(params_copy)
+        # =================================================================
+        # SCENARIO A: SELL NOW & INVEST IN S&P
+        # =================================================================
+        # Simple compound growth - no withdrawals
+        s_and_p_balance *= (1 + params.alternative_return_rate)
 
-        # Total outcome from holding = net sale proceeds + cumulative cash flow
-        hold_outcome = hold_summary.net_sale_proceeds + hold_summary.total_cash_flow_received
+        # Sell Now value is just the S&P balance
+        sell_total_value = s_and_p_balance
 
-        # Which is better?
-        difference = hold_outcome - sell_now_future_value
+        # =================================================================
+        # SCENARIO B: HOLD THE PROPERTY
+        # =================================================================
+        # TOTAL VALUE = sale proceeds + cumulative cash flow received
+        hold_total_value = hold_proj.net_sale_proceeds + hold_proj.cumulative_cash_flow
+
+        # Which is better? (Positive = Hold is better)
+        difference = hold_total_value - sell_total_value
 
         comparison_data.append({
             "year": year,
-            "sell_now_value": sell_now_future_value,
-            "hold_sale_proceeds": hold_summary.net_sale_proceeds,
-            "hold_cash_flow": hold_summary.total_cash_flow_received,
-            "hold_total_outcome": hold_outcome,
-            "difference": difference,  # Positive = hold is better
+            "sell_now_value": sell_total_value,
+            "sell_sp_balance": s_and_p_balance,
+            "hold_sale_proceeds": hold_proj.net_sale_proceeds,
+            "hold_cash_flow": hold_proj.net_cash_flow,
+            "hold_cumulative_cash_flow": hold_proj.cumulative_cash_flow,
+            "hold_total_outcome": hold_total_value,
+            "difference": difference,
             "better_option": "Hold" if difference > 0 else "Sell Now",
         })
 
