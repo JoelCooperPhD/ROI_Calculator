@@ -11,6 +11,7 @@ from .asset_building import (
     generate_asset_building_schedule,
 )
 from . import asset_building_plots as plots
+from .validation import safe_float, safe_positive_float, safe_percent
 
 
 class AssetBuildingTab(ctk.CTkFrame):
@@ -26,7 +27,8 @@ class AssetBuildingTab(ctk.CTkFrame):
         self.schedule: AssetBuildingSchedule | None = None
 
         # These will be set by the main application from other tabs
-        self._property_value: float = 0
+        self._property_value: float = 0  # ARV (After Repair Value)
+        self._purchase_price: float = 0  # What you paid (defaults to property_value)
         self._down_payment: float = 0
         self._loan_amount: float = 0
         self._annual_interest_rate: float = 0
@@ -63,6 +65,7 @@ class AssetBuildingTab(ctk.CTkFrame):
     def set_loan_params(
         self,
         property_value: float,
+        purchase_price: float,
         down_payment: float,
         loan_amount: float,
         annual_interest_rate: float,
@@ -74,6 +77,7 @@ class AssetBuildingTab(ctk.CTkFrame):
     ):
         """Set loan parameters from the Amortization tab."""
         self._property_value = property_value
+        self._purchase_price = purchase_price
         self._down_payment = down_payment
         self._loan_amount = loan_amount
         self._annual_interest_rate = annual_interest_rate
@@ -241,19 +245,21 @@ class AssetBuildingTab(ctk.CTkFrame):
 
     def _get_params(self) -> AssetBuildingParameters:
         """Build parameters using data from Amortization and Recurring Costs tabs."""
+        # Use safe parsing for all local inputs
         appreciation_params = AppreciationParameters(
-            annual_appreciation_rate=float(self.appreciation_rate_entry.get() or 0) / 100
+            annual_appreciation_rate=safe_percent(self.appreciation_rate_entry.get(), 0.03)
         )
 
         rental_params = RentalIncomeParameters(
-            monthly_rent=float(self.monthly_rent_entry.get() or 0),
-            annual_rent_growth_rate=float(self.rent_growth_entry.get() or 0) / 100,
-            vacancy_rate=float(self.vacancy_rate_entry.get() or 0) / 100,
-            property_management_rate=float(self.management_rate_entry.get() or 0) / 100,
+            monthly_rent=safe_positive_float(self.monthly_rent_entry.get(), 0.0),
+            annual_rent_growth_rate=safe_percent(self.rent_growth_entry.get(), 0.03),
+            vacancy_rate=safe_percent(self.vacancy_rate_entry.get(), 0.05),
+            property_management_rate=safe_percent(self.management_rate_entry.get(), 0.0),
         )
 
         return AssetBuildingParameters(
             property_value=self._property_value,
+            purchase_price=self._purchase_price,
             down_payment=self._down_payment,
             loan_amount=self._loan_amount,
             annual_interest_rate=self._annual_interest_rate,
@@ -271,7 +277,7 @@ class AssetBuildingTab(ctk.CTkFrame):
             capex_reserve_annual=self._capex_annual,
             # No cost inflation - assumes rent growth covers cost increases
             cost_inflation_rate=0.0,
-            marginal_tax_rate=float(self.tax_rate_entry.get() or 0) / 100,
+            marginal_tax_rate=safe_percent(self.tax_rate_entry.get(), 0.0),
             depreciation_enabled=self.depreciation_var.get(),
         )
 
@@ -290,11 +296,11 @@ class AssetBuildingTab(ctk.CTkFrame):
     def get_asset_building_params(self) -> dict:
         """Get asset building specific parameters for the Investment Summary tab."""
         return {
-            "appreciation_rate": float(self.appreciation_rate_entry.get() or 0) / 100,
-            "monthly_rent": float(self.monthly_rent_entry.get() or 0),
-            "rent_growth_rate": float(self.rent_growth_entry.get() or 0) / 100,
-            "vacancy_rate": float(self.vacancy_rate_entry.get() or 0) / 100,
-            "management_rate": float(self.management_rate_entry.get() or 0) / 100,
+            "appreciation_rate": safe_percent(self.appreciation_rate_entry.get(), 0.03),
+            "monthly_rent": safe_positive_float(self.monthly_rent_entry.get(), 0.0),
+            "rent_growth_rate": safe_percent(self.rent_growth_entry.get(), 0.03),
+            "vacancy_rate": safe_percent(self.vacancy_rate_entry.get(), 0.05),
+            "management_rate": safe_percent(self.management_rate_entry.get(), 0.0),
             # Operating costs from Recurring Costs tab (single source of truth)
             "maintenance_annual": self._maintenance_annual,
             "capex_annual": self._capex_annual,

@@ -29,6 +29,12 @@ def get_default_config() -> dict[str, Any]:
             "hoa_monthly": "0",
             "closing_costs": "8000",
             "extra_payment": "0",
+            "analysis_mode": "New Purchase",
+            "renovation_enabled": False,
+            "purchase_price": "0",
+            "renovation_cost": "0",
+            "renovation_duration": "3",
+            "rent_during_reno": "0",
         },
         # Recurring Costs tab
         "recurring_costs": {

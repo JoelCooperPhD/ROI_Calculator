@@ -23,7 +23,8 @@ from .amortization import calculate_periodic_payment
 class InvestmentParameters:
     """All parameters needed for investment analysis."""
     # Property basics (from Amortization tab)
-    property_value: float
+    property_value: float  # ARV (After Repair Value) - for appreciation calculations
+    purchase_price: float  # What you paid - for loan/equity calculations (defaults to property_value)
     down_payment: float
     loan_amount: float
     closing_costs: float
@@ -85,6 +86,20 @@ class InvestmentParameters:
             self.utilities_annual
         )
 
+    @property
+    def effective_purchase_price(self) -> float:
+        """Purchase price for calculations. Defaults to property_value if not set."""
+        if self.purchase_price > 0:
+            return self.purchase_price
+        return self.property_value
+
+    @property
+    def forced_appreciation(self) -> float:
+        """Value created through renovation (ARV - Purchase Price)."""
+        if self.renovation_enabled and self.property_value > 0 and self.effective_purchase_price > 0:
+            return self.property_value - self.effective_purchase_price
+        return 0.0
+
 
 @dataclass
 class YearlyProjection:
@@ -130,10 +145,18 @@ class InvestmentSummary:
     annualized_roi: float  # Average annual ROI
     equity_multiple: float  # Total value / Initial investment
 
-    # Comparison metrics
-    alternative_final_value: float
-    alternative_profit: float
+    # Comparison metrics (matched cash flow methodology)
+    alternative_final_value: float  # S&P value with matched cash flows
+    alternative_profit: float  # S&P profit with matched cash flows
     outperformance: float  # How much better than alternative
+
+    # Legacy comparison (initial investment only - for reference)
+    alternative_simple_value: float  # S&P with only initial investment
+    alternative_simple_profit: float
+
+    # Capital deployment tracking
+    total_capital_deployed: float  # All cash out of pocket over holding period
+    cumulative_negative_cash_flows: float  # Additional capital beyond initial
 
     # Investment grade
     grade: str
@@ -197,68 +220,90 @@ def calculate_irr(cash_flows: list[float]) -> float:
         return 0.0
 
 
-def calculate_investment_grade(irr: float, cash_on_cash_yr1: float, total_roi: float) -> tuple[str, str]:
+def calculate_investment_grade(
+    irr: float,
+    equity_multiple: float,
+    outperformance: float,
+    alternative_return_rate: float = 0.10
+) -> tuple[str, str]:
     """
-    Assign an investment grade based on key metrics.
+    Assign an investment grade based on full hold period performance vs stocks.
+
+    The grade reflects whether this investment beats the stock market alternative
+    over the entire holding period, not just Year 1 cash flow.
+
+    Args:
+        irr: Internal Rate of Return for the full holding period
+        equity_multiple: Total value / Initial investment at end of hold
+        outperformance: Dollar amount this beats (or loses to) stock alternative
+        alternative_return_rate: The stock market benchmark rate (default 10%)
 
     Returns (grade, rationale)
     """
     score = 0
     reasons = []
 
-    # IRR scoring (most important)
-    if irr >= 0.15:
+    # IRR vs benchmark (primary factor - 50 points max)
+    # Compare to the stock market alternative rate
+    irr_spread = irr - alternative_return_rate
+
+    if irr_spread >= 0.05:  # 5%+ above stocks
+        score += 50
+        reasons.append(f"IRR {irr*100:.1f}% beats stocks by 5%+")
+    elif irr_spread >= 0.02:  # 2-5% above stocks
         score += 40
-        reasons.append("Excellent IRR (15%+)")
-    elif irr >= 0.12:
+        reasons.append(f"IRR {irr*100:.1f}% beats stocks by 2-5%")
+    elif irr_spread >= 0:  # 0-2% above stocks
         score += 30
-        reasons.append("Strong IRR (12-15%)")
-    elif irr >= 0.08:
+        reasons.append(f"IRR {irr*100:.1f}% slightly beats stocks")
+    elif irr_spread >= -0.02:  # 0-2% below stocks
         score += 20
-        reasons.append("Good IRR (8-12%)")
-    elif irr >= 0.05:
+        reasons.append(f"IRR {irr*100:.1f}% slightly below stocks")
+    elif irr_spread >= -0.05:  # 2-5% below stocks
         score += 10
-        reasons.append("Moderate IRR (5-8%)")
-    else:
-        reasons.append("Low IRR (<5%)")
+        reasons.append(f"IRR {irr*100:.1f}% underperforms stocks")
+    else:  # 5%+ below stocks
+        reasons.append(f"IRR {irr*100:.1f}% significantly underperforms")
 
-    # Cash on cash scoring
-    if cash_on_cash_yr1 >= 0.10:
+    # Equity multiple (30 points max)
+    # How many times did you multiply your initial investment?
+    if equity_multiple >= 3.0:
         score += 30
-        reasons.append("Great cash flow (10%+ CoC)")
-    elif cash_on_cash_yr1 >= 0.06:
+        reasons.append(f"{equity_multiple:.1f}x equity multiple")
+    elif equity_multiple >= 2.0:
+        score += 25
+        reasons.append(f"{equity_multiple:.1f}x equity multiple")
+    elif equity_multiple >= 1.5:
         score += 20
-        reasons.append("Good cash flow (6-10% CoC)")
-    elif cash_on_cash_yr1 >= 0.02:
+        reasons.append(f"{equity_multiple:.1f}x equity multiple")
+    elif equity_multiple >= 1.2:
+        score += 15
+        reasons.append(f"{equity_multiple:.1f}x equity multiple")
+    elif equity_multiple >= 1.0:
         score += 10
-        reasons.append("Modest cash flow (2-6% CoC)")
-    elif cash_on_cash_yr1 >= 0:
-        score += 5
-        reasons.append("Break-even cash flow")
+        reasons.append(f"{equity_multiple:.1f}x (minimal gain)")
     else:
-        reasons.append("Negative cash flow")
+        reasons.append(f"{equity_multiple:.1f}x (loss of principal)")
 
-    # Total ROI scoring
-    if total_roi >= 2.0:
-        score += 30
-        reasons.append("Doubles+ investment")
-    elif total_roi >= 1.5:
+    # Outperformance vs stocks (20 points max)
+    # Did you actually beat the stock alternative in dollars?
+    if outperformance > 0:
         score += 20
-        reasons.append("50%+ total return")
-    elif total_roi >= 1.0:
+        reasons.append(f"Beats stocks by ${outperformance:,.0f}")
+    elif outperformance > -5000:
         score += 10
-        reasons.append("Positive total return")
+        reasons.append("Roughly matches stocks")
     else:
-        reasons.append("Negative total return")
+        reasons.append(f"Underperforms stocks by ${abs(outperformance):,.0f}")
 
-    # Assign grade
-    if score >= 80:
+    # Assign grade based on total score (max 100)
+    if score >= 85:
         grade = "A - Excellent"
-    elif score >= 60:
+    elif score >= 70:
         grade = "B - Good"
-    elif score >= 40:
+    elif score >= 50:
         grade = "C - Fair"
-    elif score >= 20:
+    elif score >= 30:
         grade = "D - Poor"
     else:
         grade = "F - Avoid"
@@ -396,17 +441,73 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         annualized_roi = total_roi / params.holding_period_years if params.holding_period_years > 0 else 0
     equity_multiple = (params.total_initial_investment + total_profit) / params.total_initial_investment if params.total_initial_investment > 0 else 0
 
-    # Calculate alternative investment comparison
-    alternative_final_value = params.total_initial_investment * ((1 + params.alternative_return_rate) ** params.holding_period_years)
-    alternative_profit = alternative_final_value - params.total_initial_investment
+    # ==========================================================================
+    # S&P COMPARISON WITH MATCHED CASH FLOWS
+    # ==========================================================================
+    # This is the fair comparison: What if we made the same cash deposits/withdrawals
+    # to S&P instead of to real estate?
+    #
+    # Logic:
+    # - Start with initial investment in S&P
+    # - Each year, grow by S&P return rate
+    # - If RE had negative cash flow (capital required), add that to S&P
+    # - If RE had positive cash flow, withdraw that from S&P (for lifestyle parity)
+    # - At the end, we also need to account for the "sale" - in S&P world, we just
+    #   have the balance; in RE world, we get sale proceeds
+    #
+    # The comparison becomes:
+    # RE outcome = sale proceeds (already includes cumulative cash flows implicitly
+    #              because we're comparing total profit which accounts for them)
+    # S&P outcome = final S&P balance
+    # ==========================================================================
+
+    s_and_p_balance = params.total_initial_investment
+    cumulative_negative_cash_flows = 0.0
+    total_positive_cash_flows = 0.0
+
+    for proj in yearly_projections:
+        # Grow last year's balance by S&P return
+        s_and_p_balance *= (1 + params.alternative_return_rate)
+
+        # Match the cash flows from RE investment
+        if proj.net_cash_flow < 0:
+            # RE required capital injection - this money would have gone into S&P
+            capital_injection = abs(proj.net_cash_flow)
+            s_and_p_balance += capital_injection
+            cumulative_negative_cash_flows += capital_injection
+        else:
+            # RE generated cash - withdraw same amount from S&P for fair comparison
+            # This represents: "I'd need this income either way"
+            withdrawal = proj.net_cash_flow
+            s_and_p_balance -= withdrawal
+            total_positive_cash_flows += withdrawal
+
+    # Total capital deployed = initial + all additional capital injections
+    total_capital_deployed = params.total_initial_investment + cumulative_negative_cash_flows
+
+    # The matched S&P comparison
+    alternative_final_value = s_and_p_balance
+    # S&P profit = final balance - total capital deployed + withdrawals taken
+    # (withdrawals were "income" just like positive RE cash flow)
+    alternative_profit = alternative_final_value + total_positive_cash_flows - total_capital_deployed
+
+    # RE total outcome for comparison = sale proceeds + positive cash flows - total deployed
+    # This equals total_profit when calculated correctly
     outperformance = total_profit - alternative_profit
 
-    # Calculate year 1 cash on cash for grading
-    yr1 = yearly_projections[0]
-    cash_on_cash_yr1 = yr1.net_cash_flow / params.total_initial_investment if params.total_initial_investment > 0 else 0
+    # Legacy simple comparison (initial investment only, for reference)
+    alternative_simple_value = params.total_initial_investment * (
+        (1 + params.alternative_return_rate) ** params.holding_period_years
+    )
+    alternative_simple_profit = alternative_simple_value - params.total_initial_investment
 
-    # Get investment grade
-    grade, rationale = calculate_investment_grade(irr, cash_on_cash_yr1, total_roi)
+    # Get investment grade based on full hold period performance vs stocks
+    grade, rationale = calculate_investment_grade(
+        irr=irr,
+        equity_multiple=equity_multiple,
+        outperformance=outperformance,
+        alternative_return_rate=params.alternative_return_rate
+    )
 
     return InvestmentSummary(
         params=params,
@@ -419,6 +520,10 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         alternative_final_value=alternative_final_value,
         alternative_profit=alternative_profit,
         outperformance=outperformance,
+        alternative_simple_value=alternative_simple_value,
+        alternative_simple_profit=alternative_simple_profit,
+        total_capital_deployed=total_capital_deployed,
+        cumulative_negative_cash_flows=cumulative_negative_cash_flows,
         grade=grade,
         grade_rationale=rationale,
         total_cash_invested=params.total_initial_investment,

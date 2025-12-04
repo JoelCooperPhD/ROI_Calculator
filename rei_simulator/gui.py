@@ -15,6 +15,7 @@ from .recurring_costs_gui import RecurringCostsTab
 from .asset_building_gui import AssetBuildingTab
 from .investment_summary_gui import InvestmentSummaryTab
 from . import config
+from .validation import safe_float, safe_int, safe_positive_float, safe_positive_int, safe_percent
 
 
 class AmortizationTab(ctk.CTkFrame):
@@ -227,6 +228,20 @@ class AmortizationTab(ctk.CTkFrame):
         self.renovation_frame = ctk.CTkFrame(self.input_frame, fg_color="#1a1a2e")
         # Don't pack yet - will be shown/hidden by toggle
 
+        # Purchase Price (what you're paying - for loan calculation)
+        self.purchase_price_entry = LabeledEntry(
+            self.renovation_frame, "Purchase Price ($):", "0"
+        )
+        self.purchase_price_entry.pack(fill="x", pady=5, padx=10)
+
+        purchase_note = ctk.CTkLabel(
+            self.renovation_frame,
+            text="(Loan is based on purchase price, not ARV)",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        purchase_note.pack(anchor="w", padx=(190, 0))
+
         # Renovation cost
         self.renovation_cost_entry = LabeledEntry(
             self.renovation_frame, "Renovation Cost ($):", "0"
@@ -256,7 +271,7 @@ class AmortizationTab(ctk.CTkFrame):
         # Help note about Property Value and Rent fields
         self.renovation_help_note = ctk.CTkLabel(
             self.renovation_frame,
-            text="Tip: Set Property Value to ARV (after repair value)\nand Monthly Rent to post-renovation rent.",
+            text="Property Value above = ARV (after repair value)\nMonthly Rent = post-renovation rent",
             font=ctk.CTkFont(size=11),
             text_color="#3498db",
             justify="left"
@@ -289,39 +304,69 @@ class AmortizationTab(ctk.CTkFrame):
 
         return {
             "enabled": True,
-            "cost": float(self.renovation_cost_entry.get() or 0),
-            "duration_months": int(self.renovation_duration_entry.get() or 0),
-            "rent_during_pct": float(self.rent_during_reno_entry.get() or 0) / 100,
+            "cost": safe_positive_float(self.renovation_cost_entry.get(), 0.0),
+            "duration_months": safe_positive_int(self.renovation_duration_entry.get(), 0, max_val=120),
+            "rent_during_pct": safe_percent(self.rent_during_reno_entry.get(), 0.0),
         }
 
     def get_loan_params(self) -> LoanParameters:
-        """Extract loan parameters from the form."""
-        property_value = float(self.property_value_entry.get() or 0)
-        down_payment = float(self.down_payment_entry.get() or 0)
-        principal = property_value - down_payment
+        """Extract loan parameters from the form with robust validation."""
+        # Use safe parsing for all numeric inputs
+        property_value = safe_positive_float(self.property_value_entry.get(), 400000.0)
+        down_payment = safe_positive_float(self.down_payment_entry.get(), 0.0)
+
+        # Get renovation params
+        reno = self.get_renovation_params()
+
+        # When renovation is enabled, use purchase_price for loan calculation
+        # When not enabled, purchase_price = property_value (no distinction)
+        if reno["enabled"]:
+            purchase_price = safe_positive_float(self.purchase_price_entry.get(), 0.0)
+            # If purchase_price is 0 or missing, fall back to property_value
+            # (user likely hasn't filled in this field yet)
+            if purchase_price <= 0:
+                purchase_price = property_value
+        else:
+            purchase_price = property_value
+
+        # Loan is based on purchase price, NOT ARV
+        # Ensure down payment doesn't exceed purchase price
+        down_payment = min(down_payment, purchase_price)
+        principal = purchase_price - down_payment
+        # Ensure principal is non-negative (should be guaranteed by above, but extra safety)
+        principal = max(0, principal)
 
         freq_map = {
             "Monthly": PaymentFrequency.MONTHLY,
             "Biweekly": PaymentFrequency.BIWEEKLY,
             "Weekly": PaymentFrequency.WEEKLY,
         }
+        frequency = freq_map.get(self.frequency_var.get(), PaymentFrequency.MONTHLY)
 
-        # Get renovation params
-        reno = self.get_renovation_params()
+        # Parse other fields with safe defaults
+        interest_rate = safe_float(self.interest_rate_entry.get(), 6.5, min_val=0.0, max_val=30.0) / 100
+        loan_term = safe_int(self.loan_term_entry.get(), 30, min_val=1, max_val=50)
+        closing_costs = safe_positive_float(self.closing_costs_entry.get(), 0.0)
+        pmi_rate = safe_percent(self.pmi_rate_entry.get(), 0.005)  # default 0.5%
+        property_tax_rate = safe_percent(self.property_tax_entry.get(), 0.012)  # default 1.2%
+        insurance_annual = safe_positive_float(self.insurance_entry.get(), 0.0)
+        hoa_monthly = safe_positive_float(self.hoa_entry.get(), 0.0)
+        extra_payment = safe_positive_float(self.extra_payment_entry.get(), 0.0)
 
         return LoanParameters(
             principal=principal,
-            annual_interest_rate=float(self.interest_rate_entry.get() or 0) / 100,
-            loan_term_years=int(self.loan_term_entry.get() or 30),
-            payment_frequency=freq_map[self.frequency_var.get()],
+            annual_interest_rate=interest_rate,
+            loan_term_years=loan_term,
+            payment_frequency=frequency,
             down_payment=down_payment,
-            property_value=property_value,
-            closing_costs=float(self.closing_costs_entry.get() or 0),
-            pmi_rate=float(self.pmi_rate_entry.get() or 0) / 100,
-            property_tax_rate=float(self.property_tax_entry.get() or 0) / 100,
-            insurance_annual=float(self.insurance_entry.get() or 0),
-            hoa_monthly=float(self.hoa_entry.get() or 0),
-            extra_monthly_payment=float(self.extra_payment_entry.get() or 0),
+            property_value=property_value,  # ARV (for appreciation)
+            purchase_price=purchase_price,  # What you paid (for loan calc)
+            closing_costs=closing_costs,
+            pmi_rate=pmi_rate,
+            property_tax_rate=property_tax_rate,
+            insurance_annual=insurance_annual,
+            hoa_monthly=hoa_monthly,
+            extra_monthly_payment=extra_payment,
             # Renovation parameters
             renovation_enabled=reno["enabled"],
             renovation_cost=reno["cost"],
@@ -420,6 +465,7 @@ class AmortizationTab(ctk.CTkFrame):
         self._on_mode_change(mode)
         # Load renovation settings
         self.renovation_var.set(cfg.get("renovation_enabled", False))
+        self.purchase_price_entry.set(cfg.get("purchase_price", "0"))
         self.renovation_cost_entry.set(cfg.get("renovation_cost", "0"))
         self.renovation_duration_entry.set(cfg.get("renovation_duration", "3"))
         self.rent_during_reno_entry.set(cfg.get("rent_during_reno", "0"))
@@ -442,6 +488,7 @@ class AmortizationTab(ctk.CTkFrame):
             "analysis_mode": self.analysis_mode_var.get(),
             # Renovation settings
             "renovation_enabled": self.renovation_var.get(),
+            "purchase_price": self.purchase_price_entry.get(),
             "renovation_cost": self.renovation_cost_entry.get(),
             "renovation_duration": self.renovation_duration_entry.get(),
             "rent_during_reno": self.rent_during_reno_entry.get(),
@@ -566,6 +613,15 @@ class MainApplication(ctk.CTk):
             # Extract loan params for other tabs
             loan_params = self.amortization_tab.get_loan_params()
             schedule = self.amortization_tab.schedule
+
+            # Check for empty schedule (happens when principal <= 0)
+            if len(schedule.schedule) == 0:
+                self.status_label.configure(
+                    text="Error: Loan amount is zero. Check down payment vs property value.",
+                    text_color="#e74c3c"
+                )
+                return
+
             first_payment = schedule.schedule.iloc[0]
 
             # 2. Calculate Recurring Costs (source of truth for operating costs)
@@ -585,6 +641,7 @@ class MainApplication(ctk.CTk):
             # 3. Pass loan data AND operating costs to Asset Building tab
             self.asset_building_tab.set_loan_params(
                 property_value=loan_params.property_value,
+                purchase_price=loan_params.purchase_price,
                 down_payment=loan_params.down_payment,
                 loan_amount=loan_params.principal,
                 annual_interest_rate=loan_params.annual_interest_rate,
@@ -609,6 +666,7 @@ class MainApplication(ctk.CTk):
             # Pass loan data to Investment Summary
             self.investment_summary_tab.set_loan_params(
                 property_value=loan_params.property_value,
+                purchase_price=loan_params.purchase_price,
                 down_payment=loan_params.down_payment,
                 loan_amount=loan_params.principal,
                 closing_costs=loan_params.closing_costs,

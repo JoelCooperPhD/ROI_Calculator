@@ -96,60 +96,86 @@ def plot_profit_timeline(summary: InvestmentSummary) -> Figure:
 
 def plot_investment_comparison(summary: InvestmentSummary) -> Figure:
     """
-    Compare this investment vs S&P 500 vs savings account over time.
+    Compare this investment vs S&P 500 (with matched cash flows) over time.
+
+    The S&P comparison uses matched cash flows:
+    - When RE requires capital (negative cash flow), that money goes into S&P
+    - When RE generates cash (positive cash flow), we withdraw from S&P
+    This creates a fair apples-to-apples comparison.
     """
     fig, ax = plt.subplots(figsize=(12, 6))
     _setup_dark_style(fig, ax)
 
     years = [0] + [p.year for p in summary.yearly_projections]
     initial = summary.params.total_initial_investment
+    sp500_rate = summary.params.alternative_return_rate
 
-    # This investment: initial + cumulative cash flow + equity gain
+    # This investment: value = what you'd have if you sold (net proceeds + cumulative cash flow)
     investment_values = [initial]
     for p in summary.yearly_projections:
-        # Value = what you'd have if you sold (net proceeds + cumulative cash flow)
         value = p.net_sale_proceeds + p.cumulative_cash_flow
         investment_values.append(value)
 
-    # S&P 500 comparison
-    sp500_rate = summary.params.alternative_return_rate
-    sp500_values = [initial * ((1 + sp500_rate) ** y) for y in years]
+    # S&P 500 with MATCHED CASH FLOWS (fair comparison)
+    # When RE needs money (negative CF), we add to S&P
+    # When RE generates money (positive CF), we withdraw from S&P
+    sp500_matched = [initial]
+    sp500_balance = initial
+    for p in summary.yearly_projections:
+        # Grow by S&P return
+        sp500_balance *= (1 + sp500_rate)
+        # Match the RE cash flows
+        if p.net_cash_flow < 0:
+            # RE needed capital - add same to S&P
+            sp500_balance += abs(p.net_cash_flow)
+        else:
+            # RE generated cash - withdraw same from S&P
+            sp500_balance -= p.net_cash_flow
+        sp500_matched.append(sp500_balance)
 
-    # Savings account (2% rate)
-    savings_rate = 0.02
-    savings_values = [initial * ((1 + savings_rate) ** y) for y in years]
+    # Simple S&P (initial investment only, for reference)
+    sp500_simple = [initial * ((1 + sp500_rate) ** y) for y in years]
 
-    # Plot all three
+    # Plot all lines
     ax.plot(years, investment_values, color=COLORS["primary"], linewidth=2.5,
             label="This Property", marker="o", markersize=4)
-    ax.plot(years, sp500_values, color=COLORS["alternative"], linewidth=2,
-            label=f"S&P 500 ({sp500_rate*100:.0f}%)", linestyle="--")
-    ax.plot(years, savings_values, color=COLORS["neutral"], linewidth=2,
-            label="Savings (2%)", linestyle=":")
+    ax.plot(years, sp500_matched, color=COLORS["alternative"], linewidth=2.5,
+            label=f"S&P 500 (matched CFs)", linestyle="-")
+    ax.plot(years, sp500_simple, color=COLORS["neutral"], linewidth=1.5,
+            label=f"S&P 500 (initial only)", linestyle=":", alpha=0.6)
 
-    # Fill between property and S&P
-    ax.fill_between(years, investment_values, sp500_values, alpha=0.2,
-                    where=[iv >= sv for iv, sv in zip(investment_values, sp500_values)],
-                    color=COLORS["profit"], label="Outperformance")
-    ax.fill_between(years, investment_values, sp500_values, alpha=0.2,
-                    where=[iv < sv for iv, sv in zip(investment_values, sp500_values)],
-                    color=COLORS["loss"], label="Underperformance")
+    # Fill between property and matched S&P
+    ax.fill_between(years, investment_values, sp500_matched, alpha=0.2,
+                    where=[iv >= sv for iv, sv in zip(investment_values, sp500_matched)],
+                    color=COLORS["profit"], label="RE Outperforms")
+    ax.fill_between(years, investment_values, sp500_matched, alpha=0.2,
+                    where=[iv < sv for iv, sv in zip(investment_values, sp500_matched)],
+                    color=COLORS["loss"], label="S&P Outperforms")
 
     # Annotate final values
     final_year = years[-1]
-    for values, label, color in [
-        (investment_values, "Property", COLORS["primary"]),
-        (sp500_values, "S&P 500", COLORS["alternative"]),
+    for values, label, color, offset in [
+        (investment_values, "Property", COLORS["primary"], 0),
+        (sp500_matched, "S&P (matched)", COLORS["alternative"], 0),
     ]:
         ax.annotate(f"${values[-1]:,.0f}",
                    xy=(final_year, values[-1]),
                    xytext=(final_year + 0.3, values[-1]),
                    fontsize=10, color=color, fontweight="bold")
 
+    # Add note about capital deployed
+    total_deployed = summary.total_capital_deployed
+    ax.text(0.02, 0.98,
+            f"Total Capital Deployed: ${total_deployed:,.0f}\n"
+            f"(Initial: ${initial:,.0f} + Additional: ${summary.cumulative_negative_cash_flows:,.0f})",
+            transform=ax.transAxes, fontsize=9, color="white",
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="#2c3e50", alpha=0.8))
+
     ax.set_xlabel("Year", fontsize=12)
     ax.set_ylabel("Portfolio Value ($)", fontsize=12)
-    ax.set_title("Investment Comparison", fontsize=14, fontweight="bold")
-    ax.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
+    ax.set_title("Investment Comparison (Fair: Matched Cash Flows)", fontsize=14, fontweight="bold")
+    ax.legend(loc="lower right", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x:,.0f}"))
 
     return fig
@@ -375,12 +401,12 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     ax_metrics.set_facecolor("#16213e")
     ax_metrics.axis("off")
 
-    # Metrics display
+    # Metrics display - now shows "vs S&P (matched)" for clarity
     metrics = [
         ("Total Profit", f"${summary.total_profit:,.0f}", COLORS["profit"] if summary.total_profit >= 0 else COLORS["loss"]),
         ("IRR", f"{summary.irr * 100:.1f}%", COLORS["secondary"]),
-        ("Equity Multiple", f"{summary.equity_multiple:.2f}x", COLORS["primary"]),
-        ("vs S&P 500", f"${summary.outperformance:+,.0f}", COLORS["profit"] if summary.outperformance >= 0 else COLORS["loss"]),
+        ("Capital Deployed", f"${summary.total_capital_deployed:,.0f}", COLORS["primary"]),
+        ("vs S&P (matched)", f"${summary.outperformance:+,.0f}", COLORS["profit"] if summary.outperformance >= 0 else COLORS["loss"]),
         ("Grade", summary.grade.split(" - ")[0], COLORS["warning"]),
     ]
 
@@ -411,25 +437,35 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     ax_timeline.set_title("Profit Over Time", fontsize=12, fontweight="bold")
     ax_timeline.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 
-    # Bottom right - Comparison
+    # Bottom right - Comparison (with matched cash flows)
     ax_compare = fig.add_subplot(gs[1, 1])
     _setup_dark_style(fig, ax_compare)
 
     initial = summary.params.total_initial_investment
+    sp500_rate = summary.params.alternative_return_rate
     years_full = [0] + years
 
     investment_values = [initial]
     for p in summary.yearly_projections:
         investment_values.append(p.net_sale_proceeds + p.cumulative_cash_flow)
 
-    sp500_values = [initial * ((1 + summary.params.alternative_return_rate) ** y) for y in years_full]
+    # S&P 500 with MATCHED CASH FLOWS
+    sp500_matched = [initial]
+    sp500_balance = initial
+    for p in summary.yearly_projections:
+        sp500_balance *= (1 + sp500_rate)
+        if p.net_cash_flow < 0:
+            sp500_balance += abs(p.net_cash_flow)
+        else:
+            sp500_balance -= p.net_cash_flow
+        sp500_matched.append(sp500_balance)
 
     ax_compare.plot(years_full, investment_values, color=COLORS["primary"], linewidth=2, label="Property")
-    ax_compare.plot(years_full, sp500_values, color=COLORS["alternative"], linewidth=2, linestyle="--", label="S&P 500")
+    ax_compare.plot(years_full, sp500_matched, color=COLORS["alternative"], linewidth=2, label="S&P (matched)")
     ax_compare.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=9)
     ax_compare.set_xlabel("Year", fontsize=10)
     ax_compare.set_ylabel("Value ($)", fontsize=10)
-    ax_compare.set_title("vs Alternative Investments", fontsize=12, fontweight="bold")
+    ax_compare.set_title("vs S&P (Matched Cash Flows)", fontsize=12, fontweight="bold")
     ax_compare.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 
     # Cash flow bar chart

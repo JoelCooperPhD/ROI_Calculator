@@ -12,6 +12,7 @@ from .investment_summary import (
     SellNowVsHoldAnalysis,
 )
 from . import investment_summary_plots as plots
+from .validation import safe_float, safe_positive_float, safe_percent
 
 
 class InvestmentSummaryTab(ctk.CTkFrame):
@@ -29,7 +30,8 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self._is_existing_property: bool = False
 
         # These will be set by the main application from other tabs
-        self._property_value: float = 0
+        self._property_value: float = 0  # ARV (After Repair Value)
+        self._purchase_price: float = 0  # What you paid (defaults to property_value)
         self._down_payment: float = 0
         self._loan_amount: float = 0
         self._closing_costs: float = 0
@@ -81,6 +83,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
     def set_loan_params(
         self,
         property_value: float,
+        purchase_price: float,
         down_payment: float,
         loan_amount: float,
         closing_costs: float,
@@ -94,6 +97,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
     ):
         """Set loan parameters from the Amortization tab."""
         self._property_value = property_value
+        self._purchase_price = purchase_price
         self._down_payment = down_payment
         self._loan_amount = loan_amount
         self._closing_costs = closing_costs
@@ -242,6 +246,20 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         )
         alt_note.pack(anchor="w", padx=(190, 0))
 
+        # Info button for comparison methodology
+        info_btn = ctk.CTkButton(
+            self.input_frame,
+            text="ⓘ About this comparison",
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent",
+            hover_color="#2a2a2a",
+            text_color="gray",
+            anchor="w",
+            height=24,
+            command=self._show_comparison_methodology
+        )
+        info_btn.pack(anchor="w", padx=(185, 0), pady=(2, 0))
+
         self.initial_reserves_entry = LabeledEntry(
             self.input_frame, "Initial Cash Reserves ($):", "10000"
         )
@@ -265,9 +283,11 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             self.grade_frame,
             text="Run calculation to see grade",
             font=ctk.CTkFont(size=11),
-            text_color="gray"
+            text_color="gray",
+            wraplength=280,
+            justify="center"
         )
-        self.grade_desc_label.pack(pady=(0, 15))
+        self.grade_desc_label.pack(pady=(0, 15), padx=10)
 
 
     def _create_section_header(self, text: str):
@@ -278,6 +298,124 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             font=ctk.CTkFont(size=14, weight="bold")
         )
         label.pack(anchor="w", pady=(15, 5))
+
+    def _show_comparison_methodology(self):
+        """Show modal explaining the S&P 500 comparison methodology."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("About the S&P 500 Comparison")
+        dialog.geometry("520x520")
+        dialog.resizable(False, False)
+
+        # Withdraw initially to prevent empty window flash
+        dialog.withdraw()
+
+        dialog.transient(self)
+
+        # Center on parent window
+        dialog.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() // 2) - (520 // 2)
+        y = self.winfo_rooty() + (self.winfo_height() // 2) - (520 // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        # Scrollable content frame
+        content = ctk.CTkScrollableFrame(dialog, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Title
+        title = ctk.CTkLabel(
+            content,
+            text="About the S&P 500 Comparison",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        title.pack(anchor="w", pady=(0, 15))
+
+        # Methodology section
+        method_header = ctk.CTkLabel(
+            content,
+            text="METHODOLOGY",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#3498db"
+        )
+        method_header.pack(anchor="w", pady=(0, 5))
+
+        method_text = ctk.CTkLabel(
+            content,
+            text=(
+                "This comparison matches your real estate cash flows "
+                "to a hypothetical S&P 500 investment:\n\n"
+                "✓  Same initial cash invested in both\n"
+                "✓  When RE needs more capital, S&P gets it too\n"
+                "✓  When RE generates cash, S&P withdraws the same\n"
+                "✓  Both use nominal (pre-inflation) returns"
+            ),
+            font=ctk.CTkFont(size=12),
+            justify="left",
+            wraplength=460
+        )
+        method_text.pack(anchor="w", pady=(0, 15))
+
+        # What's not modeled section
+        not_modeled_header = ctk.CTkLabel(
+            content,
+            text="WHAT'S NOT MODELED",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#e67e22"
+        )
+        not_modeled_header.pack(anchor="w", pady=(0, 5))
+
+        not_modeled_text = ctk.CTkLabel(
+            content,
+            text=(
+                "•  Taxes — favors S&P as modeled (RE has depreciation, "
+                "1031 exchanges, and deductible mortgage interest)\n"
+                "•  S&P volatility — uses a constant average return\n"
+                "•  Dividend tax drag — ~0.3%/yr reduction in taxable accounts\n"
+                "•  Transaction costs — minimal for both"
+            ),
+            font=ctk.CTkFont(size=12),
+            justify="left",
+            wraplength=460
+        )
+        not_modeled_text.pack(anchor="w", pady=(0, 15))
+
+        # Bottom line section
+        bottom_header = ctk.CTkLabel(
+            content,
+            text="BOTTOM LINE",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#27ae60"
+        )
+        bottom_header.pack(anchor="w", pady=(0, 5))
+
+        bottom_text = ctk.CTkLabel(
+            content,
+            text=(
+                "This comparison answers: \"What if I put the same "
+                "cash into index funds instead?\"\n\n"
+                "The omitted factors roughly balance out. If anything, "
+                "ignoring taxes understates RE's advantage for "
+                "high-income investors."
+            ),
+            font=ctk.CTkFont(size=12),
+            justify="left",
+            wraplength=460
+        )
+        bottom_text.pack(anchor="w", pady=(0, 20))
+
+        # Close button
+        close_btn = ctk.CTkButton(
+            content,
+            text="Got it",
+            width=100,
+            command=dialog.destroy
+        )
+        close_btn.pack(anchor="e")
+
+        # Show dialog after all content is packed
+        def show_dialog():
+            dialog.deiconify()
+            dialog.grab_set()
+        dialog.after(50, show_dialog)
 
     def _create_plot_area(self):
         """Create the plot selection and display area."""
@@ -345,10 +483,11 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.holding_period_label.configure(text=f"Hold for: {years} years")
 
     def _get_params(self) -> InvestmentParameters:
-        """Build parameters from all sources."""
+        """Build parameters from all sources with safe validation."""
         return InvestmentParameters(
             # From Amortization tab
             property_value=self._property_value,
+            purchase_price=self._purchase_price,
             down_payment=self._down_payment,
             loan_amount=self._loan_amount,
             closing_costs=self._closing_costs,
@@ -369,11 +508,11 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             maintenance_annual=self._maintenance_annual,
             capex_annual=self._capex_annual,
             utilities_annual=self._utilities_annual,
-            # This tab's inputs
+            # This tab's inputs - use safe parsing
             holding_period_years=self.holding_period_var.get(),
-            selling_cost_percent=float(self.selling_cost_entry.get() or 6) / 100,
-            initial_reserves=float(self.initial_reserves_entry.get() or 0),
-            alternative_return_rate=float(self.alternative_return_entry.get() or 10) / 100,
+            selling_cost_percent=safe_percent(self.selling_cost_entry.get(), 0.06),
+            initial_reserves=safe_positive_float(self.initial_reserves_entry.get(), 0.0),
+            alternative_return_rate=safe_percent(self.alternative_return_entry.get(), 0.10),
             # Renovation parameters from Amortization tab
             renovation_enabled=self._renovation_enabled,
             renovation_cost=self._renovation_cost,

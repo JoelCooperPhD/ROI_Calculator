@@ -22,7 +22,8 @@ class LoanParameters:
 
     # Optional parameters
     down_payment: float = 0.0  # Down payment amount
-    property_value: float = 0.0  # Total property value (for LTV calculations)
+    property_value: float = 0.0  # ARV/Market value (for appreciation, post-reno equity)
+    purchase_price: float = 0.0  # What you paid (for loan calc, initial LTV) - defaults to property_value
     closing_costs: float = 0.0  # Closing costs
     pmi_rate: float = 0.0  # Private mortgage insurance annual rate (if LTV > 80%)
     property_tax_rate: float = 0.0  # Annual property tax rate
@@ -35,6 +36,13 @@ class LoanParameters:
     renovation_cost: float = 0.0  # Total renovation cost
     renovation_duration_months: int = 0  # Months of renovation
     rent_during_renovation_pct: float = 0.0  # 0 = vacant, 0.5 = 50% rent, 1.0 = full rent
+
+    @property
+    def effective_purchase_price(self) -> float:
+        """Purchase price for loan calculations. Defaults to property_value if not set."""
+        if self.purchase_price > 0:
+            return self.purchase_price
+        return self.property_value
 
     @property
     def periods_per_year(self) -> int:
@@ -50,15 +58,29 @@ class LoanParameters:
 
     @property
     def loan_to_value(self) -> float:
-        """Calculate loan-to-value ratio."""
+        """Calculate loan-to-value ratio based on purchase price (what lender uses)."""
+        if self.effective_purchase_price > 0:
+            return self.principal / self.effective_purchase_price
+        return 0.0
+
+    @property
+    def loan_to_arv(self) -> float:
+        """Calculate loan-to-ARV ratio (for equity analysis post-renovation)."""
         if self.property_value > 0:
             return self.principal / self.property_value
         return 0.0
 
     @property
     def requires_pmi(self) -> bool:
-        """PMI typically required when LTV > 80%."""
+        """PMI typically required when LTV > 80% (based on purchase price)."""
         return self.loan_to_value > 0.80
+
+    @property
+    def forced_appreciation(self) -> float:
+        """Value created through renovation (ARV - Purchase Price)."""
+        if self.renovation_enabled and self.property_value > 0 and self.effective_purchase_price > 0:
+            return self.property_value - self.effective_purchase_price
+        return 0.0
 
 
 @dataclass

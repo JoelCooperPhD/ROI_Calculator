@@ -82,14 +82,15 @@ class AppreciationParameters:
 class AssetBuildingParameters:
     """Complete parameters for asset building analysis."""
     # Property basics
-    property_value: float
-    down_payment: float
-    loan_amount: float
+    property_value: float  # ARV (After Repair Value) - for appreciation calculations
+    purchase_price: float = 0.0  # What you paid - defaults to property_value if not set
+    down_payment: float = 0.0
+    loan_amount: float = 0.0
 
     # Loan details
-    annual_interest_rate: float
-    loan_term_years: int
-    monthly_pi_payment: float  # Principal & Interest payment
+    annual_interest_rate: float = 0.0
+    loan_term_years: int = 30
+    monthly_pi_payment: float = 0.0  # Principal & Interest payment
 
     # Analysis period
     analysis_years: int = 30
@@ -122,9 +123,25 @@ class AssetBuildingParameters:
         return self.down_payment
 
     @property
+    def effective_purchase_price(self) -> float:
+        """Purchase price for calculations. Defaults to property_value if not set."""
+        if self.purchase_price > 0:
+            return self.purchase_price
+        return self.property_value
+
+    @property
     def initial_ltv(self) -> float:
-        """Initial loan-to-value ratio."""
-        return self.loan_amount / self.property_value
+        """Initial loan-to-value ratio (based on purchase price for lender's perspective)."""
+        if self.effective_purchase_price > 0:
+            return self.loan_amount / self.effective_purchase_price
+        return 0.0
+
+    @property
+    def initial_ltv_arv(self) -> float:
+        """Initial loan-to-ARV ratio (for post-renovation equity analysis)."""
+        if self.property_value > 0:
+            return self.loan_amount / self.property_value
+        return 0.0
 
     @property
     def total_annual_operating_costs(self) -> float:

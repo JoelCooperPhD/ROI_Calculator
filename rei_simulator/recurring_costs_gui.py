@@ -12,6 +12,7 @@ from .recurring_costs import (
     RecurringCostSchedule,
 )
 from . import recurring_costs_plots as rc_plots
+from .validation import safe_float, safe_int, safe_positive_float, safe_positive_int, safe_percent
 
 
 class RecurringCostsTab(ctk.CTkFrame):
@@ -198,8 +199,9 @@ class RecurringCostsTab(ctk.CTkFrame):
 
     def _get_params(self) -> PropertyCostParameters:
         """Build parameters using data from Amortization tab + local inputs."""
-        property_age = int(self.property_age_entry.get() or 0)
-        maintenance_pct = float(self.maintenance_pct_entry.get() or 1.0) / 100
+        # Use safe parsing for all inputs
+        property_age = safe_positive_int(self.property_age_entry.get(), 10, max_val=200)
+        maintenance_pct = safe_percent(self.maintenance_pct_entry.get(), 0.01)  # default 1%
 
         # Default inflation rate for cost projections (each item can override)
         default_inflation = 0.03
@@ -243,32 +245,32 @@ class RecurringCostsTab(ctk.CTkFrame):
                 )
             )
 
-        # Utilities (from local inputs)
-        electricity = float(self.electricity_entry.get() or 0)
+        # Utilities (from local inputs) - use safe parsing
+        electricity = safe_positive_float(self.electricity_entry.get(), 0.0)
         if electricity > 0:
             recurring_costs.append(
                 RecurringCostItem("Electricity", CostCategory.UTILITIES, electricity, 0.03)
             )
 
-        gas = float(self.gas_entry.get() or 0)
+        gas = safe_positive_float(self.gas_entry.get(), 0.0)
         if gas > 0:
             recurring_costs.append(
                 RecurringCostItem("Gas/Heating", CostCategory.UTILITIES, gas, 0.04)
             )
 
-        water = float(self.water_entry.get() or 0)
+        water = safe_positive_float(self.water_entry.get(), 0.0)
         if water > 0:
             recurring_costs.append(
                 RecurringCostItem("Water & Sewer", CostCategory.UTILITIES, water, 0.03)
             )
 
-        trash = float(self.trash_entry.get() or 0)
+        trash = safe_positive_float(self.trash_entry.get(), 0.0)
         if trash > 0:
             recurring_costs.append(
                 RecurringCostItem("Trash Collection", CostCategory.UTILITIES, trash, 0.02)
             )
 
-        internet = float(self.internet_entry.get() or 0)
+        internet = safe_positive_float(self.internet_entry.get(), 0.0)
         if internet > 0:
             recurring_costs.append(
                 RecurringCostItem("Internet", CostCategory.UTILITIES, internet, 0.02)
