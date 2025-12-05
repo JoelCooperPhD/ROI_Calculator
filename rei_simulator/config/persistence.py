@@ -120,11 +120,11 @@ def _from_legacy_dict(data: dict) -> AppConfig:
 
 
 def _float(val) -> float:
-    """Convert value to float, handling strings."""
+    """Convert value to float, handling strings. Rounds to 2 decimal places."""
     if isinstance(val, (int, float)):
-        return float(val)
+        return round(float(val), 2)
     try:
-        return float(val)
+        return round(float(val), 2)
     except (ValueError, TypeError):
         return 0.0
 

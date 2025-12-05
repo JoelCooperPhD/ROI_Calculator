@@ -31,6 +31,9 @@ def safe_float(value: str | None, default: float = 0.0, min_val: float | None = 
         if result == float('inf') or result == float('-inf'):
             return default
 
+        # Round to 2 decimal places
+        result = round(result, 2)
+
         # Apply bounds
         if min_val is not None:
             result = max(min_val, result)
@@ -88,12 +91,14 @@ def safe_percent(value: str | None, default: float = 0.0, as_decimal: bool = Tru
         as_decimal: If True, return as decimal (0.055 for 5.5%), else return raw (5.5)
 
     Returns:
-        Parsed percentage, clamped to 0-100% range
+        Parsed percentage, clamped to 0-100% range, rounded to 2 decimal places
     """
     parsed = safe_float(value, default if not as_decimal else default * 100, min_val=0.0, max_val=100.0)
 
     if as_decimal:
-        return parsed / 100.0
+        # Round to 4 decimal places to preserve 2 decimal precision from percentage
+        # e.g., 5.55% -> 0.0555 (not 0.055500000001)
+        return round(parsed / 100.0, 4)
     return parsed
 
 
