@@ -96,12 +96,11 @@ def plot_profit_timeline(summary: InvestmentSummary) -> Figure:
 
 def plot_investment_comparison(summary: InvestmentSummary) -> Figure:
     """
-    Compare this investment vs S&P 500 (with matched cash flows) over time.
+    Compare property equity growth vs S&P 500 over time.
 
-    The S&P comparison uses matched cash flows:
-    - When RE requires capital (negative cash flow), that money goes into S&P
-    - When RE generates cash (positive cash flow), we withdraw from S&P
-    This creates a fair apples-to-apples comparison.
+    Simple comparison: same initial investment, track growth over time.
+    Property shows equity (value - loan balance) + cumulative cash flow.
+    S&P shows compound growth at the alternative return rate.
     """
     fig, ax = plt.subplots(figsize=(12, 6))
     _setup_dark_style(fig, ax)
@@ -110,71 +109,51 @@ def plot_investment_comparison(summary: InvestmentSummary) -> Figure:
     initial = summary.params.total_initial_investment
     sp500_rate = summary.params.alternative_return_rate
 
-    # This investment: value = what you'd have if you sold (net proceeds + cumulative cash flow)
-    investment_values = [initial]
+    # Property: net sale proceeds + cumulative cash flow (what you'd actually have if you sold)
+    # This includes selling costs, showing the real cost of liquidating real estate
+    property_values = [initial]
     for p in summary.yearly_projections:
         value = p.net_sale_proceeds + p.cumulative_cash_flow
-        investment_values.append(value)
+        property_values.append(value)
 
-    # S&P 500 with MATCHED CASH FLOWS (fair comparison)
-    # When RE needs money (negative CF), we add to S&P
-    # When RE generates money (positive CF), we withdraw from S&P
-    sp500_matched = [initial]
-    sp500_balance = initial
-    for p in summary.yearly_projections:
-        # Grow by S&P return
-        sp500_balance *= (1 + sp500_rate)
-        # Match the RE cash flows
-        if p.net_cash_flow < 0:
-            # RE needed capital - add same to S&P
-            sp500_balance += abs(p.net_cash_flow)
-        else:
-            # RE generated cash - withdraw same from S&P
-            sp500_balance -= p.net_cash_flow
-        sp500_matched.append(sp500_balance)
+    # S&P 500: simple compound growth on initial investment
+    sp500_values = [initial * ((1 + sp500_rate) ** y) for y in years]
 
-    # Simple S&P (initial investment only, for reference)
-    sp500_simple = [initial * ((1 + sp500_rate) ** y) for y in years]
+    # Plot both lines
+    ax.plot(years, property_values, color=COLORS["primary"], linewidth=2.5,
+            label="Property (Equity + Cash Flow)", marker="o", markersize=4)
+    ax.plot(years, sp500_values, color=COLORS["alternative"], linewidth=2.5,
+            label=f"S&P 500 ({sp500_rate*100:.0f}% annual)", marker="s", markersize=4)
 
-    # Plot all lines
-    ax.plot(years, investment_values, color=COLORS["primary"], linewidth=2.5,
-            label="This Property", marker="o", markersize=4)
-    ax.plot(years, sp500_matched, color=COLORS["alternative"], linewidth=2.5,
-            label=f"S&P 500 (matched CFs)", linestyle="-")
-    ax.plot(years, sp500_simple, color=COLORS["neutral"], linewidth=1.5,
-            label=f"S&P 500 (initial only)", linestyle=":", alpha=0.6)
-
-    # Fill between property and matched S&P
-    ax.fill_between(years, investment_values, sp500_matched, alpha=0.2,
-                    where=[iv >= sv for iv, sv in zip(investment_values, sp500_matched)],
-                    color=COLORS["profit"], label="RE Outperforms")
-    ax.fill_between(years, investment_values, sp500_matched, alpha=0.2,
-                    where=[iv < sv for iv, sv in zip(investment_values, sp500_matched)],
-                    color=COLORS["loss"], label="S&P Outperforms")
+    # Fill between to show which is winning
+    ax.fill_between(years, property_values, sp500_values, alpha=0.2,
+                    where=[pv >= sv for pv, sv in zip(property_values, sp500_values)],
+                    color=COLORS["profit"], label="Property Wins")
+    ax.fill_between(years, property_values, sp500_values, alpha=0.2,
+                    where=[pv < sv for pv, sv in zip(property_values, sp500_values)],
+                    color=COLORS["loss"], label="S&P Wins")
 
     # Annotate final values
     final_year = years[-1]
-    for values, label, color, offset in [
-        (investment_values, "Property", COLORS["primary"], 0),
-        (sp500_matched, "S&P (matched)", COLORS["alternative"], 0),
-    ]:
-        ax.annotate(f"${values[-1]:,.0f}",
-                   xy=(final_year, values[-1]),
-                   xytext=(final_year + 0.3, values[-1]),
-                   fontsize=10, color=color, fontweight="bold")
+    ax.annotate(f"${property_values[-1]:,.0f}",
+               xy=(final_year, property_values[-1]),
+               xytext=(final_year + 0.3, property_values[-1]),
+               fontsize=10, color=COLORS["primary"], fontweight="bold")
+    ax.annotate(f"${sp500_values[-1]:,.0f}",
+               xy=(final_year, sp500_values[-1]),
+               xytext=(final_year + 0.3, sp500_values[-1]),
+               fontsize=10, color=COLORS["alternative"], fontweight="bold")
 
-    # Add note about capital deployed
-    total_deployed = summary.total_capital_deployed
+    # Show initial investment
     ax.text(0.02, 0.98,
-            f"Total Capital Deployed: ${total_deployed:,.0f}\n"
-            f"(Initial: ${initial:,.0f} + Additional: ${summary.cumulative_negative_cash_flows:,.0f})",
-            transform=ax.transAxes, fontsize=9, color="white",
+            f"Initial Investment: ${initial:,.0f}",
+            transform=ax.transAxes, fontsize=10, color="white",
             verticalalignment="top",
             bbox=dict(boxstyle="round", facecolor="#2c3e50", alpha=0.8))
 
     ax.set_xlabel("Year", fontsize=12)
-    ax.set_ylabel("Portfolio Value ($)", fontsize=12)
-    ax.set_title("Investment Comparison (Fair: Matched Cash Flows)", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Total Value ($)", fontsize=12)
+    ax.set_title("Property vs S&P 500", fontsize=14, fontweight="bold")
     ax.legend(loc="lower right", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x:,.0f}"))
 
@@ -401,12 +380,12 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     ax_metrics.set_facecolor("#16213e")
     ax_metrics.axis("off")
 
-    # Metrics display - now shows "vs S&P (matched)" for clarity
+    # Metrics display
     metrics = [
         ("Total Profit", f"${summary.total_profit:,.0f}", COLORS["profit"] if summary.total_profit >= 0 else COLORS["loss"]),
         ("IRR", f"{summary.irr * 100:.1f}%", COLORS["secondary"]),
         ("Capital Deployed", f"${summary.total_capital_deployed:,.0f}", COLORS["primary"]),
-        ("vs S&P (matched)", f"${summary.outperformance:+,.0f}", COLORS["profit"] if summary.outperformance >= 0 else COLORS["loss"]),
+        ("vs S&P 500", f"${summary.outperformance:+,.0f}", COLORS["profit"] if summary.outperformance >= 0 else COLORS["loss"]),
         ("Grade", summary.grade.split(" - ")[0], COLORS["warning"]),
     ]
 
@@ -443,7 +422,7 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     ax_timeline.tick_params(axis='both', labelsize=7)
     ax_timeline.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 
-    # Bottom right - Comparison (with matched cash flows)
+    # Bottom right - Comparison vs S&P 500
     ax_compare = fig.add_subplot(gs[1, 1])
     _setup_dark_style(fig, ax_compare)
 
@@ -451,27 +430,20 @@ def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
     sp500_rate = summary.params.alternative_return_rate
     years_full = [0] + years
 
-    investment_values = [initial]
+    # Property: net sale proceeds + cumulative cash flow (what you'd have if you sold)
+    property_values = [initial]
     for p in summary.yearly_projections:
-        investment_values.append(p.net_sale_proceeds + p.cumulative_cash_flow)
+        property_values.append(p.net_sale_proceeds + p.cumulative_cash_flow)
 
-    # S&P 500 with MATCHED CASH FLOWS
-    sp500_matched = [initial]
-    sp500_balance = initial
-    for p in summary.yearly_projections:
-        sp500_balance *= (1 + sp500_rate)
-        if p.net_cash_flow < 0:
-            sp500_balance += abs(p.net_cash_flow)
-        else:
-            sp500_balance -= p.net_cash_flow
-        sp500_matched.append(sp500_balance)
+    # S&P 500: simple compound growth
+    sp500_values = [initial * ((1 + sp500_rate) ** y) for y in years_full]
 
-    ax_compare.plot(years_full, investment_values, color=COLORS["primary"], linewidth=2, label="Property")
-    ax_compare.plot(years_full, sp500_matched, color=COLORS["alternative"], linewidth=2, label="S&P (matched)")
+    ax_compare.plot(years_full, property_values, color=COLORS["primary"], linewidth=2, label="Property")
+    ax_compare.plot(years_full, sp500_values, color=COLORS["alternative"], linewidth=2, label="S&P 500")
     ax_compare.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=7)
     ax_compare.set_xlabel("Year", fontsize=8)
     ax_compare.set_ylabel("Value ($)", fontsize=8)
-    ax_compare.set_title("vs S&P (Matched Cash Flows)", fontsize=10, fontweight="bold")
+    ax_compare.set_title("Property vs S&P 500", fontsize=10, fontweight="bold")
     ax_compare.tick_params(axis='both', labelsize=7)
     ax_compare.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
 

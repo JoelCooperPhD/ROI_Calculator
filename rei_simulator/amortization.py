@@ -181,22 +181,52 @@ def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedu
     - hoa_payment: HOA payment
     - total_monthly_cost: All costs combined
     """
-    # Calculate base periodic payment
-    base_payment = calculate_periodic_payment(
-        params.principal,
-        params.periodic_interest_rate,
-        params.total_periods
-    )
-
     # Calculate periodic amounts for escrow items
     periods_per_year = params.periods_per_year
-    # PMI will be calculated per-period based on current balance (see loop below)
     tax_periodic = (params.property_tax_rate * params.property_value / periods_per_year) if params.property_value > 0 else 0
     insurance_periodic = params.insurance_annual / periods_per_year
     hoa_periodic = params.hoa_monthly * (12 / periods_per_year)
 
     # Initialize lists for schedule
     records = []
+
+    # Handle cash purchase (no loan) - generate costs-only schedule
+    if params.principal <= 0:
+        # Generate schedule showing just taxes, insurance, HOA over the loan term period
+        for period in range(1, params.total_periods + 1):
+            months_from_start = period * (12 / periods_per_year)
+            total_monthly_cost = tax_periodic + insurance_periodic + hoa_periodic
+
+            records.append({
+                "period": period,
+                "payment_date_months": months_from_start,
+                "beginning_balance": 0,
+                "scheduled_payment": 0,
+                "principal_payment": 0,
+                "interest_payment": 0,
+                "extra_payment": 0,
+                "total_payment": 0,
+                "ending_balance": 0,
+                "cumulative_interest": 0,
+                "cumulative_principal": 0,
+                "equity": params.property_value,
+                "loan_to_value": 0,
+                "pmi_payment": 0,
+                "tax_payment": tax_periodic,
+                "insurance_payment": insurance_periodic,
+                "hoa_payment": hoa_periodic,
+                "total_monthly_cost": total_monthly_cost,
+            })
+
+        df = pd.DataFrame(records)
+        return AmortizationSchedule(schedule=df, loan_params=params)
+
+    # Calculate base periodic payment for loans
+    base_payment = calculate_periodic_payment(
+        params.principal,
+        params.periodic_interest_rate,
+        params.total_periods
+    )
 
     balance = params.principal
     cumulative_interest = 0.0
@@ -278,61 +308,3 @@ def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedu
 
     df = pd.DataFrame(records)
     return AmortizationSchedule(schedule=df, loan_params=params)
-
-
-def calculate_payoff_with_extra_payments(params: LoanParameters,
-                                          extra_payment: float) -> tuple[int, float]:
-    """
-    Calculate payoff period and interest savings with extra payments.
-
-    Returns:
-        Tuple of (payoff_period, interest_saved)
-    """
-    # Calculate without extra payments
-    params_no_extra = LoanParameters(
-        principal=params.principal,
-        annual_interest_rate=params.annual_interest_rate,
-        loan_term_years=params.loan_term_years,
-        payment_frequency=params.payment_frequency,
-    )
-    schedule_no_extra = generate_amortization_schedule(params_no_extra)
-
-    # Calculate with extra payments
-    params_with_extra = LoanParameters(
-        principal=params.principal,
-        annual_interest_rate=params.annual_interest_rate,
-        loan_term_years=params.loan_term_years,
-        payment_frequency=params.payment_frequency,
-        extra_monthly_payment=extra_payment,
-    )
-    schedule_with_extra = generate_amortization_schedule(params_with_extra)
-
-    interest_saved = schedule_no_extra.total_interest_paid - schedule_with_extra.total_interest_paid
-    payoff_period = schedule_with_extra.payoff_period
-
-    return payoff_period, interest_saved
-
-
-def compare_loan_scenarios(scenarios: list[LoanParameters]) -> pd.DataFrame:
-    """
-    Compare multiple loan scenarios side by side.
-
-    Returns a DataFrame with key metrics for each scenario.
-    """
-    results = []
-
-    for i, params in enumerate(scenarios):
-        schedule = generate_amortization_schedule(params)
-
-        results.append({
-            "scenario": i + 1,
-            "principal": params.principal,
-            "rate": params.annual_interest_rate * 100,
-            "term_years": params.loan_term_years,
-            "monthly_payment": schedule.schedule["scheduled_payment"].iloc[0],
-            "total_interest": schedule.total_interest_paid,
-            "total_cost": schedule.total_cost,
-            "payoff_months": schedule.payoff_period * (12 / params.periods_per_year),
-        })
-
-    return pd.DataFrame(results)

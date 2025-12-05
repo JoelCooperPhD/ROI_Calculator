@@ -132,7 +132,18 @@ class AssetBuildingTab(ctk.CTkFrame):
         self._create_section_header("Property Appreciation")
 
         self.appreciation_rate_entry = LabeledEntry(
-            self.input_frame, "Annual Appreciation (%):", "3.0"
+            self.input_frame,
+            "Annual Appreciation (%):",
+            "3.0",
+            tooltip=(
+                "Expected annual increase in property value.\n\n"
+                "• 3% is close to historical average\n"
+                "• Varies significantly by location\n"
+                "• Hot markets may see 5-7%+\n"
+                "• Some areas appreciate slower (1-2%)\n\n"
+                "Conservative estimates are safer for planning."
+            ),
+            tooltip_title="Property Appreciation",
         )
         self.appreciation_rate_entry.pack(fill="x", pady=5)
 
@@ -140,12 +151,34 @@ class AssetBuildingTab(ctk.CTkFrame):
         self._create_section_header("Rental Income")
 
         self.monthly_rent_entry = LabeledEntry(
-            self.input_frame, "Monthly Rent ($):", "0"
+            self.input_frame,
+            "Monthly Rent ($):",
+            "0",
+            tooltip=(
+                "Expected monthly rental income.\n\n"
+                "• Set to $0 if owner-occupied\n"
+                "• Research comparable rentals in area\n"
+                "• Check Zillow, Rentometer, or local listings\n\n"
+                "For rentals, this is your gross income before "
+                "vacancy, management, and expenses."
+            ),
+            tooltip_title="Monthly Rent",
         )
         self.monthly_rent_entry.pack(fill="x", pady=5)
 
         self.square_feet_entry = LabeledEntry(
-            self.input_frame, "Square Feet:", ""
+            self.input_frame,
+            "Square Feet:",
+            "",
+            tooltip=(
+                "Property size in square feet.\n\n"
+                "Optional - used to calculate rent per sq ft "
+                "for comparison with market rates.\n\n"
+                "Typical ranges:\n"
+                "• $12-18/sq ft/year in affordable markets\n"
+                "• $24-48/sq ft/year in expensive markets"
+            ),
+            tooltip_title="Square Feet",
         )
         self.square_feet_entry.pack(fill="x", pady=5)
 
@@ -164,17 +197,49 @@ class AssetBuildingTab(ctk.CTkFrame):
         self.square_feet_entry.entry.bind("<KeyRelease>", self._update_rent_per_sqft)
 
         self.rent_growth_entry = LabeledEntry(
-            self.input_frame, "Annual Rent Growth (%):", "3.0"
+            self.input_frame,
+            "Annual Rent Growth (%):",
+            "3.0",
+            tooltip=(
+                "Expected annual increase in rent.\n\n"
+                "• 3% is typical (roughly tracks inflation)\n"
+                "• Strong rental markets may see 4-5%\n"
+                "• Rent-controlled areas may be lower\n\n"
+                "Rent growth helps offset rising expenses over time."
+            ),
+            tooltip_title="Rent Growth Rate",
         )
         self.rent_growth_entry.pack(fill="x", pady=5)
 
         self.vacancy_rate_entry = LabeledEntry(
-            self.input_frame, "Vacancy Rate (%):", "5.0"
+            self.input_frame,
+            "Vacancy Rate (%):",
+            "5.0",
+            tooltip=(
+                "Expected percentage of time property is vacant.\n\n"
+                "• 5% = ~18 days/year vacant\n"
+                "• 8% is more conservative\n"
+                "• Strong rental markets may be 3-4%\n\n"
+                "Accounts for turnover between tenants, "
+                "time to find new renters, and any gaps."
+            ),
+            tooltip_title="Vacancy Rate",
         )
         self.vacancy_rate_entry.pack(fill="x", pady=5)
 
         self.management_rate_entry = LabeledEntry(
-            self.input_frame, "Property Mgmt (%):", "0"
+            self.input_frame,
+            "Property Mgmt (%):",
+            "0",
+            tooltip=(
+                "Property management fee as % of collected rent.\n\n"
+                "• 0% if self-managing\n"
+                "• 8-10% is typical for professional management\n"
+                "• May be higher for single-family (10-12%)\n\n"
+                "Even if self-managing, some investors include "
+                "this to value their time."
+            ),
+            tooltip_title="Property Management",
         )
         self.management_rate_entry.pack(fill="x", pady=5)
 
@@ -182,7 +247,19 @@ class AssetBuildingTab(ctk.CTkFrame):
         self._create_section_header("Tax Benefits")
 
         self.tax_rate_entry = LabeledEntry(
-            self.input_frame, "Marginal Tax Rate (%):", "0"
+            self.input_frame,
+            "Marginal Tax Rate (%):",
+            "0",
+            tooltip=(
+                "Your marginal (highest) income tax rate.\n\n"
+                "• 22-24% for middle incomes\n"
+                "• 32-35% for higher incomes\n"
+                "• Include state taxes if applicable\n\n"
+                "Used to calculate tax benefits from mortgage "
+                "interest deduction and depreciation.\n\n"
+                "Set to 0% to ignore tax benefits."
+            ),
+            tooltip_title="Marginal Tax Rate",
         )
         self.tax_rate_entry.pack(fill="x", pady=5)
 

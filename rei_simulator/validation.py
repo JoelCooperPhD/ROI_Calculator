@@ -3,10 +3,6 @@
 Provides robust parsing and validation of user inputs with sensible defaults.
 """
 
-from typing import TypeVar
-
-T = TypeVar('T', int, float)
-
 
 def safe_float(value: str | None, default: float = 0.0, min_val: float | None = None,
                max_val: float | None = None) -> float:
@@ -129,70 +125,3 @@ def safe_positive_int(value: str | None, default: int = 0,
         Parsed int value, guaranteed to be >= 0
     """
     return safe_int(value, default, min_val=0, max_val=max_val)
-
-
-def validate_loan_inputs(
-    property_value: str | None,
-    down_payment: str | None,
-    interest_rate: str | None,
-    loan_term: str | None,
-) -> tuple[bool, str, dict]:
-    """Validate core loan inputs and return parsed values.
-
-    Args:
-        property_value: Property value string
-        down_payment: Down payment string
-        interest_rate: Annual interest rate string (as percentage)
-        loan_term: Loan term in years string
-
-    Returns:
-        Tuple of (is_valid, error_message, parsed_values_dict)
-    """
-    errors = []
-    parsed = {}
-
-    # Property value: must be positive
-    parsed["property_value"] = safe_positive_float(property_value, 0.0)
-    if parsed["property_value"] <= 0:
-        errors.append("Property value must be greater than 0")
-
-    # Down payment: must be non-negative and less than property value
-    parsed["down_payment"] = safe_positive_float(down_payment, 0.0)
-    if parsed["down_payment"] >= parsed["property_value"] and parsed["property_value"] > 0:
-        errors.append("Down payment must be less than property value")
-
-    # Interest rate: typically 0-30%
-    parsed["interest_rate"] = safe_float(interest_rate, 6.5, min_val=0.0, max_val=30.0) / 100.0
-
-    # Loan term: typically 1-50 years
-    parsed["loan_term"] = safe_int(loan_term, 30, min_val=1, max_val=50)
-
-    is_valid = len(errors) == 0
-    error_message = "; ".join(errors) if errors else ""
-
-    return is_valid, error_message, parsed
-
-
-def validate_rental_inputs(
-    monthly_rent: str | None,
-    vacancy_rate: str | None,
-    management_rate: str | None,
-) -> tuple[bool, str, dict]:
-    """Validate rental income inputs.
-
-    Returns:
-        Tuple of (is_valid, error_message, parsed_values_dict)
-    """
-    parsed = {}
-
-    # Monthly rent: non-negative
-    parsed["monthly_rent"] = safe_positive_float(monthly_rent, 0.0)
-
-    # Vacancy rate: 0-100%
-    parsed["vacancy_rate"] = safe_percent(vacancy_rate, 0.05)
-
-    # Management rate: 0-100%
-    parsed["management_rate"] = safe_percent(management_rate, 0.0)
-
-    # Always valid for rental inputs (0 rent is valid for non-rental properties)
-    return True, "", parsed

@@ -99,7 +99,19 @@ class RecurringCostsTab(ctk.CTkFrame):
         self._create_section_header("Maintenance & Repairs")
 
         self.maintenance_pct_entry = LabeledEntry(
-            self.input_frame, "Annual Maintenance (%):", "1.0",
+            self.input_frame,
+            "Annual Maintenance (%):",
+            "1.0",
+            tooltip=(
+                "Annual maintenance and repair budget as a percentage "
+                "of property value.\n\n"
+                "• 1% is a common rule of thumb\n"
+                "• Older homes may need 1.5-2%\n"
+                "• Newer homes may only need 0.5%\n\n"
+                "Covers routine repairs, landscaping, appliance "
+                "replacement, and general upkeep."
+            ),
+            tooltip_title="Annual Maintenance",
         )
         self.maintenance_pct_entry.pack(fill="x", pady=5)
 
@@ -115,27 +127,72 @@ class RecurringCostsTab(ctk.CTkFrame):
         self._create_section_header("Utilities (Annual)")
 
         self.electricity_entry = LabeledEntry(
-            self.input_frame, "Electricity ($):", "1800"
+            self.input_frame,
+            "Electricity ($):",
+            "1800",
+            tooltip=(
+                "Annual electricity cost.\n\n"
+                "• Varies widely by climate and home size\n"
+                "• $100-200/month is typical\n"
+                "• Set to $0 if tenant pays"
+            ),
+            tooltip_title="Electricity",
         )
         self.electricity_entry.pack(fill="x", pady=5)
 
         self.gas_entry = LabeledEntry(
-            self.input_frame, "Gas/Heating ($):", "1200"
+            self.input_frame,
+            "Gas/Heating ($):",
+            "1200",
+            tooltip=(
+                "Annual gas or heating fuel cost.\n\n"
+                "• Higher in cold climates\n"
+                "• $0 if all-electric home\n"
+                "• Set to $0 if tenant pays"
+            ),
+            tooltip_title="Gas/Heating",
         )
         self.gas_entry.pack(fill="x", pady=5)
 
         self.water_entry = LabeledEntry(
-            self.input_frame, "Water & Sewer ($):", "720"
+            self.input_frame,
+            "Water & Sewer ($):",
+            "720",
+            tooltip=(
+                "Annual water and sewer cost.\n\n"
+                "• $50-80/month is typical\n"
+                "• Often landlord-paid for multi-family\n"
+                "• Set to $0 if tenant pays"
+            ),
+            tooltip_title="Water & Sewer",
         )
         self.water_entry.pack(fill="x", pady=5)
 
         self.trash_entry = LabeledEntry(
-            self.input_frame, "Trash Collection ($):", "300"
+            self.input_frame,
+            "Trash Collection ($):",
+            "300",
+            tooltip=(
+                "Annual trash and recycling pickup cost.\n\n"
+                "• $20-40/month is typical\n"
+                "• Sometimes included in HOA\n"
+                "• Set to $0 if tenant pays or included"
+            ),
+            tooltip_title="Trash Collection",
         )
         self.trash_entry.pack(fill="x", pady=5)
 
         self.internet_entry = LabeledEntry(
-            self.input_frame, "Internet ($):", "900"
+            self.input_frame,
+            "Internet ($):",
+            "900",
+            tooltip=(
+                "Annual internet service cost.\n\n"
+                "• $60-100/month is typical\n"
+                "• Usually tenant-paid for rentals\n"
+                "• Set to $0 if tenant pays"
+            ),
+            tooltip_title="Internet",
         )
         self.internet_entry.pack(fill="x", pady=5)
 
@@ -214,7 +271,6 @@ class RecurringCostsTab(ctk.CTkFrame):
             property_value=self._property_value,
             analysis_years=analysis_years,
             general_inflation_rate=default_inflation,
-            maintenance_percent=maintenance_pct,
         )
 
         # Build recurring costs (each item has its own inflation rate)

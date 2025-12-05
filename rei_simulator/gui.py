@@ -976,30 +976,25 @@ class MainApplication(ctk.CTk):
             loan_params = self.amortization_tab.get_loan_params()
             has_loan = self.amortization_tab.has_loan()
 
-            # 1. Calculate Amortization if there's a loan
-            if has_loan:
-                self.amortization_tab.calculate()
+            # 1. Calculate Amortization (generates costs-only schedule for cash purchases)
+            self.amortization_tab.calculate()
 
-                if self.amortization_tab.schedule is None:
-                    self.status_label.configure(text="Error in amortization calculation", text_color="#e74c3c")
-                    return
+            if self.amortization_tab.schedule is None:
+                self.status_label.configure(text="Error in amortization calculation", text_color="#e74c3c")
+                return
 
-                schedule = self.amortization_tab.schedule
+            schedule = self.amortization_tab.schedule
 
-                # Check for empty schedule (happens when principal <= 0)
-                if len(schedule.schedule) == 0:
-                    self.status_label.configure(
-                        text="Error: Loan amount is zero. Check down payment vs property value.",
-                        text_color="#e74c3c"
-                    )
-                    return
+            # Check for empty schedule
+            if len(schedule.schedule) == 0:
+                self.status_label.configure(
+                    text="Error: Could not generate schedule. Check property value.",
+                    text_color="#e74c3c"
+                )
+                return
 
-                first_payment = schedule.schedule.iloc[0]
-                monthly_pi_payment = first_payment['scheduled_payment']
-            else:
-                # No loan - clear the amortization chart and set payment to 0
-                self.amortization_tab.clear_chart()
-                monthly_pi_payment = 0
+            first_payment = schedule.schedule.iloc[0]
+            monthly_pi_payment = first_payment['scheduled_payment'] if has_loan else 0
 
             # 2. Calculate Recurring Costs (source of truth for operating costs)
             self.recurring_costs_tab.set_loan_params(

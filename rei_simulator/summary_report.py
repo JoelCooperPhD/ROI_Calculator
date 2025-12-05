@@ -7,10 +7,10 @@ from typing import Optional
 import webbrowser
 import tempfile
 
-from .amortization import AmortizationSchedule, LoanParameters
-from .recurring_costs import RecurringCostSchedule, PropertyCostParameters
-from .asset_building import AssetBuildingSchedule, AssetBuildingParameters
-from .investment_summary import InvestmentSummary, InvestmentParameters
+from .amortization import AmortizationSchedule
+from .recurring_costs import RecurringCostSchedule
+from .asset_building import AssetBuildingSchedule
+from .investment_summary import InvestmentSummary, InvestmentParameters, SellNowVsHoldAnalysis
 
 
 @dataclass
@@ -59,10 +59,330 @@ class ReportData:
     recurring_costs: Optional[RecurringCostSchedule] = None
     asset_building: Optional[AssetBuildingSchedule] = None
     investment_summary: Optional[InvestmentSummary] = None
+    sell_now_analysis: Optional[SellNowVsHoldAnalysis] = None  # For existing property mode
 
 
-def generate_html_report(data: ReportData) -> str:
-    """Generate a complete HTML summary report from the analysis data."""
+# =============================================================================
+# Shared CSS Styles
+# =============================================================================
+
+_CSS_STYLES = """
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--gray-100);
+            color: var(--gray-800);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        header.new-purchase {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        }
+
+        header.existing-property {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+
+        header h1 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        header .subtitle {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        header .analysis-type {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .grade-badge {
+            display: inline-block;
+            font-size: 2.5rem;
+            font-weight: bold;
+            width: 70px;
+            height: 70px;
+            line-height: 70px;
+            text-align: center;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.2);
+            float: right;
+            margin-top: -0.5rem;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .section h2 {
+            font-size: 1.1rem;
+            color: var(--gray-700);
+            border-bottom: 2px solid var(--gray-200);
+            padding-bottom: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .metric {
+            padding: 1rem;
+            background: var(--gray-50);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+        }
+
+        .metric.success {
+            border-left-color: var(--success);
+        }
+
+        .metric.warning {
+            border-left-color: var(--warning);
+        }
+
+        .metric.danger {
+            border-left-color: var(--danger);
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .metric-value.small {
+            font-size: 1.1rem;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        th {
+            background: var(--gray-50);
+            font-weight: 600;
+            color: var(--gray-700);
+            font-size: 0.85rem;
+        }
+
+        td {
+            color: var(--gray-800);
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .highlight {
+            background: #fef3c7;
+        }
+
+        .highlight-green {
+            background: #d1fae5;
+        }
+
+        .highlight-red {
+            background: #fee2e2;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .comparison-item {
+            padding: 1.25rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .comparison-item.real-estate {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        }
+
+        .comparison-item.stocks {
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+        }
+
+        .comparison-item.hold {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+        }
+
+        .comparison-item.sell {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        }
+
+        .comparison-label {
+            font-size: 0.85rem;
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
+        }
+
+        .comparison-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .winner {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--gray-50);
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .winner-label {
+            font-size: 0.9rem;
+            color: var(--gray-600);
+        }
+
+        .winner-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--success);
+        }
+
+        .recommendation-box {
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        .recommendation-box.hold {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border: 2px solid #059669;
+        }
+
+        .recommendation-box.sell {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #d97706;
+        }
+
+        .recommendation-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .recommendation-detail {
+            color: var(--gray-600);
+        }
+
+        .rationale {
+            background: var(--gray-50);
+            padding: 1rem;
+            border-radius: 8px;
+            font-style: italic;
+            color: var(--gray-600);
+            margin-top: 1rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--gray-600);
+            font-size: 0.85rem;
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+            .container {
+                padding: 0;
+            }
+            .section {
+                box-shadow: none;
+                border: 1px solid var(--gray-200);
+                break-inside: avoid;
+            }
+        }
+"""
+
+
+def _format_currency(value: float) -> str:
+    """Format a number as currency."""
+    if value < 0:
+        return f"-${abs(value):,.0f}"
+    return f"${value:,.0f}"
+
+
+# =============================================================================
+# New Purchase Report
+# =============================================================================
+
+def _generate_new_purchase_report(data: ReportData) -> str:
+    """Generate HTML report for a new property purchase analysis."""
 
     # Extract key metrics
     inv = data.investment_summary
@@ -125,258 +445,79 @@ def generate_html_report(data: ReportData) -> str:
     # Equity breakdown
     principal_paid = amort.total_principal_paid if amort else 0
 
+    # Generate rental section if applicable
+    rental_section = ""
+    if data.monthly_rent > 0:
+        annual_mortgage = monthly_pi * 12
+        total_expenses = annual_mortgage + year1_operating
+        rental_section = f"""
+        <div class="section">
+            <h2>Rental Income & Cash Flow (Year 1)</h2>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <th colspan="2">Rental Income</th>
+                        <th colspan="2">Cash Flow Analysis</th>
+                    </tr>
+                    <tr>
+                        <td>Gross Rent</td>
+                        <td class="text-right">{_format_currency(gross_rent_annual)}</td>
+                        <td>Mortgage (P&I)</td>
+                        <td class="text-right">-{_format_currency(annual_mortgage)}</td>
+                    </tr>
+                    <tr>
+                        <td>Vacancy Loss ({data.vacancy_rate*100:.0f}%)</td>
+                        <td class="text-right">-{_format_currency(vacancy_loss)}</td>
+                        <td>Operating Costs</td>
+                        <td class="text-right">-{_format_currency(year1_operating)}</td>
+                    </tr>
+                    <tr>
+                        <td>Effective Rent</td>
+                        <td class="text-right">{_format_currency(effective_rent)}</td>
+                        <td>Total Expenses</td>
+                        <td class="text-right">-{_format_currency(total_expenses)}</td>
+                    </tr>
+                    <tr>
+                        <td>Management ({data.management_rate*100:.0f}%)</td>
+                        <td class="text-right">-{_format_currency(management_cost)}</td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>Net Rental Income</strong></td>
+                        <td class="text-right"><strong>{_format_currency(net_rental_income)}</strong></td>
+                        <td><strong>Year 1 Cash Flow</strong></td>
+                        <td class="text-right"><strong>{_format_currency(year1_cash_flow)}</strong></td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="metrics-grid" style="margin-top: 1rem;">
+                <div class="metric {'success' if cash_on_cash_y1 > 0 else 'danger'}">
+                    <div class="metric-label">Cash-on-Cash Return (Y1)</div>
+                    <div class="metric-value">{cash_on_cash_y1:.1f}%</div>
+                </div>
+                <div class="metric {'success' if total_cash_flow > 0 else 'danger'}">
+                    <div class="metric-label">Total Cash Flow ({data.holding_years} yrs)</div>
+                    <div class="metric-value small">{_format_currency(total_cash_flow)}</div>
+                </div>
+            </div>
+        </div>
+        """
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real Estate Investment Analysis Summary</title>
-    <style>
-        :root {{
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --success: #16a34a;
-            --warning: #d97706;
-            --danger: #dc2626;
-            --gray-50: #f9fafb;
-            --gray-100: #f3f4f6;
-            --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
-            --gray-600: #4b5563;
-            --gray-700: #374151;
-            --gray-800: #1f2937;
-            --gray-900: #111827;
-        }}
-
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: var(--gray-100);
-            color: var(--gray-800);
-            line-height: 1.6;
-        }}
-
-        .container {{
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 2rem;
-        }}
-
-        header {{
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 2rem;
-            border-radius: 12px;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }}
-
-        header h1 {{
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
-        }}
-
-        header .subtitle {{
-            opacity: 0.9;
-            font-size: 0.95rem;
-        }}
-
-        .grade-badge {{
-            display: inline-block;
-            font-size: 2.5rem;
-            font-weight: bold;
-            width: 70px;
-            height: 70px;
-            line-height: 70px;
-            text-align: center;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.2);
-            float: right;
-            margin-top: -0.5rem;
-        }}
-
-        .section {{
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }}
-
-        .section h2 {{
-            font-size: 1.1rem;
-            color: var(--gray-700);
-            border-bottom: 2px solid var(--gray-200);
-            padding-bottom: 0.75rem;
-            margin-bottom: 1rem;
-        }}
-
-        .metrics-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-        }}
-
-        .metric {{
-            padding: 1rem;
-            background: var(--gray-50);
-            border-radius: 8px;
-            border-left: 4px solid var(--primary);
-        }}
-
-        .metric.success {{
-            border-left-color: var(--success);
-        }}
-
-        .metric.warning {{
-            border-left-color: var(--warning);
-        }}
-
-        .metric.danger {{
-            border-left-color: var(--danger);
-        }}
-
-        .metric-label {{
-            font-size: 0.8rem;
-            color: var(--gray-600);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }}
-
-        .metric-value {{
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--gray-900);
-        }}
-
-        .metric-value.small {{
-            font-size: 1.1rem;
-        }}
-
-        .table-container {{
-            overflow-x: auto;
-        }}
-
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-        }}
-
-        th, td {{
-            padding: 0.75rem 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--gray-200);
-        }}
-
-        th {{
-            background: var(--gray-50);
-            font-weight: 600;
-            color: var(--gray-700);
-            font-size: 0.85rem;
-        }}
-
-        td {{
-            color: var(--gray-800);
-        }}
-
-        .text-right {{
-            text-align: right;
-        }}
-
-        .highlight {{
-            background: #fef3c7;
-        }}
-
-        .comparison {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }}
-
-        .comparison-item {{
-            padding: 1.25rem;
-            border-radius: 8px;
-            text-align: center;
-        }}
-
-        .comparison-item.real-estate {{
-            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-        }}
-
-        .comparison-item.stocks {{
-            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-        }}
-
-        .comparison-label {{
-            font-size: 0.85rem;
-            color: var(--gray-600);
-            margin-bottom: 0.5rem;
-        }}
-
-        .comparison-value {{
-            font-size: 1.75rem;
-            font-weight: 700;
-        }}
-
-        .winner {{
-            margin-top: 1rem;
-            padding: 1rem;
-            background: var(--gray-50);
-            border-radius: 8px;
-            text-align: center;
-        }}
-
-        .winner-label {{
-            font-size: 0.9rem;
-            color: var(--gray-600);
-        }}
-
-        .winner-value {{
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--success);
-        }}
-
-        .rationale {{
-            background: var(--gray-50);
-            padding: 1rem;
-            border-radius: 8px;
-            font-style: italic;
-            color: var(--gray-600);
-            margin-top: 1rem;
-        }}
-
-        footer {{
-            text-align: center;
-            padding: 2rem;
-            color: var(--gray-600);
-            font-size: 0.85rem;
-        }}
-
-        @media print {{
-            body {{
-                background: white;
-            }}
-            .container {{
-                padding: 0;
-            }}
-            .section {{
-                box-shadow: none;
-                border: 1px solid var(--gray-200);
-                break-inside: avoid;
-            }}
-        }}
-    </style>
+    <title>New Purchase Analysis - Real Estate Investment</title>
+    <style>{_CSS_STYLES}</style>
 </head>
 <body>
     <div class="container">
-        <header>
+        <header class="new-purchase">
             <span class="grade-badge">{grade}</span>
+            <div class="analysis-type">New Purchase Analysis</div>
             <h1>Investment Analysis Summary</h1>
             <p class="subtitle">Generated {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</p>
         </header>
@@ -407,15 +548,15 @@ def generate_html_report(data: ReportData) -> str:
 
         <!-- Property & Loan Details -->
         <div class="section">
-            <h2>Property & Loan Structure</h2>
+            <h2>Purchase & Loan Structure</h2>
             <div class="table-container">
                 <table>
                     <tr>
-                        <th colspan="2">Property Details</th>
+                        <th colspan="2">Purchase Details</th>
                         <th colspan="2">Loan Details</th>
                     </tr>
                     <tr>
-                        <td>Property Value (ARV)</td>
+                        <td>Property Value{' (ARV)' if data.has_renovation else ''}</td>
                         <td class="text-right">{_format_currency(data.property_value)}</td>
                         <td>Loan Amount</td>
                         <td class="text-right">{_format_currency(data.loan_amount)}</td>
@@ -450,7 +591,7 @@ def generate_html_report(data: ReportData) -> str:
                         <td></td>
                     </tr>''' if data.has_renovation else ''}
                     <tr class="highlight">
-                        <td><strong>Total Initial Investment</strong></td>
+                        <td><strong>Total Cash Required</strong></td>
                         <td class="text-right"><strong>{_format_currency(total_initial_investment)}</strong></td>
                         <td><strong>Initial LTV</strong></td>
                         <td class="text-right"><strong>{(data.loan_amount / data.property_value * 100):.1f}%</strong></td>
@@ -504,11 +645,11 @@ def generate_html_report(data: ReportData) -> str:
         </div>
 
         <!-- Rental Income & Cash Flow -->
-        {_generate_rental_section(data, gross_rent_annual, vacancy_loss, effective_rent, management_cost, net_rental_income, year1_operating, monthly_pi, year1_cash_flow, total_cash_flow, cash_on_cash_y1, total_initial_investment)}
+        {rental_section}
 
         <!-- Equity & Appreciation -->
         <div class="section">
-            <h2>Equity & Appreciation ({data.holding_years} Year Hold)</h2>
+            <h2>Equity Growth ({data.holding_years} Year Projection)</h2>
             <div class="metrics-grid">
                 <div class="metric">
                     <div class="metric-label">Final Property Value</div>
@@ -553,7 +694,7 @@ def generate_html_report(data: ReportData) -> str:
 
         <!-- Sale Analysis -->
         <div class="section">
-            <h2>Sale Analysis (End of Year {data.holding_years})</h2>
+            <h2>Exit Strategy (End of Year {data.holding_years})</h2>
             <div class="table-container">
                 <table>
                     <tr>
@@ -580,7 +721,7 @@ def generate_html_report(data: ReportData) -> str:
         <div class="section">
             <h2>Real Estate vs Stock Market</h2>
             <p style="color: var(--gray-600); margin-bottom: 1rem; font-size: 0.9rem;">
-                Comparing your real estate investment to investing the same capital in the S&P 500 (10% avg return)
+                Comparing this investment to deploying the same capital in the S&P 500 (10% avg annual return)
             </p>
             <div class="comparison">
                 <div class="comparison-item real-estate">
@@ -600,9 +741,9 @@ def generate_html_report(data: ReportData) -> str:
             </div>
         </div>
 
-        <!-- Loan Amortization Summary -->
+        <!-- Loan Summary -->
         <div class="section">
-            <h2>Loan Summary</h2>
+            <h2>Loan Summary (Through Year {data.holding_years})</h2>
             <div class="table-container">
                 <table>
                     <tr>
@@ -622,7 +763,7 @@ def generate_html_report(data: ReportData) -> str:
                         <td class="text-right">{(amort.interest_to_principal_ratio if amort else 0):.2f}</td>
                     </tr>
                     <tr class="highlight">
-                        <td><strong>Remaining Balance (Year {data.holding_years})</strong></td>
+                        <td><strong>Remaining Balance</strong></td>
                         <td class="text-right"><strong>{_format_currency(final_loan_balance)}</strong></td>
                     </tr>
                 </table>
@@ -641,19 +782,91 @@ def generate_html_report(data: ReportData) -> str:
     return html
 
 
-def _generate_rental_section(data: ReportData, gross_rent_annual: float, vacancy_loss: float,
-                             effective_rent: float, management_cost: float, net_rental_income: float,
-                             year1_operating: float, monthly_pi: float, year1_cash_flow: float,
-                             total_cash_flow: float, cash_on_cash_y1: float, total_initial_investment: float) -> str:
-    """Generate the rental income and cash flow section."""
+# =============================================================================
+# Existing Property Report
+# =============================================================================
 
-    if data.monthly_rent <= 0:
-        return ""
+def _generate_existing_property_report(data: ReportData) -> str:
+    """Generate HTML report for an existing property hold vs sell analysis."""
 
-    annual_mortgage = monthly_pi * 12
-    total_expenses = annual_mortgage + year1_operating
+    # Extract key metrics
+    inv = data.investment_summary
+    amort = data.amortization
+    asset = data.asset_building
+    sell_analysis = data.sell_now_analysis
 
-    return f"""
+    # Current position
+    current_equity = data.down_payment  # In existing property mode, down_payment = current equity
+    current_property_value = data.property_value
+    current_loan_balance = data.loan_amount
+
+    monthly_pi = amort.schedule['total_payment'].iloc[0] if amort else 0
+    property_taxes_annual = data.property_value * data.property_tax_rate
+    hoa_annual = data.hoa_monthly * 12
+
+    # Year 1 operating costs
+    year1_operating = (
+        property_taxes_annual +
+        data.insurance_annual +
+        hoa_annual +
+        data.maintenance_annual +
+        data.utilities_annual
+    )
+
+    # Get investment metrics
+    total_profit = inv.total_profit if inv else 0
+    irr = inv.irr if inv else 0
+    total_roi = inv.total_roi if inv else 0
+    annualized_roi = inv.annualized_roi if inv else 0
+    grade = inv.grade if inv else "N/A"
+    grade_rationale = inv.grade_rationale if inv else ""
+
+    # Final values from asset building
+    final_property_value = asset.schedule['property_value'].iloc[-1] if asset else data.property_value
+    final_loan_balance = asset.schedule['loan_balance'].iloc[-1] if asset else data.loan_amount
+    final_equity = asset.schedule['total_equity'].iloc[-1] if asset else data.down_payment
+    total_appreciation = asset.total_appreciation_gain if asset else 0
+
+    # Cash flow
+    year1_cash_flow = asset.schedule['net_cash_flow'].iloc[0] if asset else 0
+    total_cash_flow = asset.total_cash_flow if asset else 0
+    cash_on_cash_y1 = asset.cash_on_cash_return_year1 if asset else 0
+
+    # Rental income
+    gross_rent_annual = data.monthly_rent * 12
+    vacancy_loss = gross_rent_annual * data.vacancy_rate
+    effective_rent = gross_rent_annual - vacancy_loss
+    management_cost = effective_rent * data.management_rate
+    net_rental_income = effective_rent - management_cost
+
+    # Sell now analysis
+    if sell_analysis:
+        sell_now_proceeds = sell_analysis.net_proceeds_if_sell_now
+        selling_costs_now = sell_analysis.selling_costs_now
+        hold_outcome = sell_analysis.hold_outcome
+        sell_now_outcome = sell_analysis.sell_now_outcome
+        recommendation = sell_analysis.recommendation
+        advantage_amount = sell_analysis.advantage_amount
+    else:
+        sell_now_proceeds = current_equity - (current_property_value * 0.06)
+        selling_costs_now = current_property_value * 0.06
+        hold_outcome = final_equity
+        sell_now_outcome = sell_now_proceeds * (1.10 ** data.holding_years)
+        recommendation = "Hold" if hold_outcome > sell_now_outcome else "Sell"
+        advantage_amount = hold_outcome - sell_now_outcome
+
+    # LTV calculation
+    ltv = (current_loan_balance / current_property_value * 100) if current_property_value > 0 else 0
+
+    # Equity breakdown
+    principal_paid = amort.total_principal_paid if amort else 0
+
+    # Generate rental section if applicable
+    rental_section = ""
+    if data.monthly_rent > 0:
+        annual_mortgage = monthly_pi * 12
+        total_expenses = annual_mortgage + year1_operating
+        rental_section = f"""
         <div class="section">
             <h2>Rental Income & Cash Flow (Year 1)</h2>
             <div class="table-container">
@@ -706,14 +919,306 @@ def _generate_rental_section(data: ReportData, gross_rent_annual: float, vacancy
                 </div>
             </div>
         </div>
+        """
+
+    # Recommendation styling
+    is_hold = recommendation.lower().startswith("hold")
+    recommendation_class = "hold" if is_hold else "sell"
+    recommendation_text = "Continue Holding" if is_hold else "Consider Selling"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Existing Property Analysis - Hold vs Sell</title>
+    <style>{_CSS_STYLES}</style>
+</head>
+<body>
+    <div class="container">
+        <header class="existing-property">
+            <span class="grade-badge">{grade}</span>
+            <div class="analysis-type">Existing Property Analysis</div>
+            <h1>Should You Hold or Sell?</h1>
+            <p class="subtitle">Generated {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</p>
+        </header>
+
+        <!-- Key Decision -->
+        <div class="section">
+            <h2>Sell Now vs Hold Analysis ({data.holding_years} Year Horizon)</h2>
+            <div class="comparison">
+                <div class="comparison-item hold">
+                    <div class="comparison-label">If You Hold {data.holding_years} Years</div>
+                    <div class="comparison-value" style="color: #059669;">{_format_currency(hold_outcome)}</div>
+                    <div style="font-size: 0.85rem; color: var(--gray-600); margin-top: 0.5rem;">
+                        Sale proceeds + accumulated cash flow
+                    </div>
+                </div>
+                <div class="comparison-item sell">
+                    <div class="comparison-label">If You Sell Now & Invest</div>
+                    <div class="comparison-value" style="color: #d97706;">{_format_currency(sell_now_outcome)}</div>
+                    <div style="font-size: 0.85rem; color: var(--gray-600); margin-top: 0.5rem;">
+                        Net proceeds invested in S&P 500
+                    </div>
+                </div>
+            </div>
+
+            <div class="recommendation-box {recommendation_class}">
+                <div class="recommendation-title">{recommendation_text}</div>
+                <div class="recommendation-detail">
+                    {'Holding outperforms selling by' if is_hold else 'Selling outperforms holding by'}
+                    <strong>{_format_currency(abs(advantage_amount))}</strong>
+                </div>
+            </div>
+
+            <div class="rationale">{grade_rationale}</div>
+        </div>
+
+        <!-- Current Position -->
+        <div class="section">
+            <h2>Current Position</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Current Market Value</div>
+                    <div class="metric-value small">{_format_currency(current_property_value)}</div>
+                </div>
+                <div class="metric success">
+                    <div class="metric-label">Current Equity</div>
+                    <div class="metric-value small">{_format_currency(current_equity)}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Remaining Loan Balance</div>
+                    <div class="metric-value small">{_format_currency(current_loan_balance)}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Current LTV</div>
+                    <div class="metric-value">{ltv:.1f}%</div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--gray-700);">If You Sold Today</h3>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <td>Current Market Value</td>
+                        <td class="text-right">{_format_currency(current_property_value)}</td>
+                    </tr>
+                    <tr>
+                        <td>Selling Costs (6%)</td>
+                        <td class="text-right">-{_format_currency(selling_costs_now)}</td>
+                    </tr>
+                    <tr>
+                        <td>Loan Payoff</td>
+                        <td class="text-right">-{_format_currency(current_loan_balance)}</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>Net Proceeds If Sold Today</strong></td>
+                        <td class="text-right"><strong>{_format_currency(sell_now_proceeds)}</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Forward Looking Metrics -->
+        <div class="section">
+            <h2>Forward Performance Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric {'success' if total_profit > 0 else 'danger'}">
+                    <div class="metric-label">Projected Profit (Hold)</div>
+                    <div class="metric-value">{_format_currency(total_profit)}</div>
+                </div>
+                <div class="metric {'success' if irr > 8 else 'warning' if irr > 0 else 'danger'}">
+                    <div class="metric-label">Projected IRR</div>
+                    <div class="metric-value">{irr:.1f}%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Total ROI</div>
+                    <div class="metric-value">{total_roi:.1f}%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Annualized ROI</div>
+                    <div class="metric-value">{annualized_roi:.1f}%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loan Details -->
+        <div class="section">
+            <h2>Loan Details</h2>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <th colspan="2">Current Loan</th>
+                        <th colspan="2">Payment Details</th>
+                    </tr>
+                    <tr>
+                        <td>Current Balance</td>
+                        <td class="text-right">{_format_currency(current_loan_balance)}</td>
+                        <td>Interest Rate</td>
+                        <td class="text-right">{data.interest_rate:.2f}%</td>
+                    </tr>
+                    <tr>
+                        <td>Remaining Term</td>
+                        <td class="text-right">{data.loan_term_years} years</td>
+                        <td>Monthly P&I</td>
+                        <td class="text-right">{_format_currency(monthly_pi)}</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>Current LTV</strong></td>
+                        <td class="text-right"><strong>{ltv:.1f}%</strong></td>
+                        <td><strong>Annual Mortgage Cost</strong></td>
+                        <td class="text-right"><strong>{_format_currency(monthly_pi * 12)}</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recurring Costs -->
+        <div class="section">
+            <h2>Annual Ownership Costs</h2>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <th>Cost Category</th>
+                        <th class="text-right">Annual</th>
+                        <th class="text-right">Monthly</th>
+                    </tr>
+                    <tr>
+                        <td>Property Taxes ({data.property_tax_rate*100:.2f}%)</td>
+                        <td class="text-right">{_format_currency(property_taxes_annual)}</td>
+                        <td class="text-right">{_format_currency(property_taxes_annual/12)}</td>
+                    </tr>
+                    <tr>
+                        <td>Homeowners Insurance</td>
+                        <td class="text-right">{_format_currency(data.insurance_annual)}</td>
+                        <td class="text-right">{_format_currency(data.insurance_annual/12)}</td>
+                    </tr>
+                    <tr>
+                        <td>HOA Fees</td>
+                        <td class="text-right">{_format_currency(hoa_annual)}</td>
+                        <td class="text-right">{_format_currency(data.hoa_monthly)}</td>
+                    </tr>
+                    <tr>
+                        <td>Maintenance & Repairs</td>
+                        <td class="text-right">{_format_currency(data.maintenance_annual)}</td>
+                        <td class="text-right">{_format_currency(data.maintenance_annual/12)}</td>
+                    </tr>
+                    <tr>
+                        <td>Utilities</td>
+                        <td class="text-right">{_format_currency(data.utilities_annual)}</td>
+                        <td class="text-right">{_format_currency(data.utilities_annual/12)}</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>Total Operating Costs</strong></td>
+                        <td class="text-right"><strong>{_format_currency(year1_operating)}</strong></td>
+                        <td class="text-right"><strong>{_format_currency(year1_operating/12)}</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Rental Income & Cash Flow -->
+        {rental_section}
+
+        <!-- Projected Equity Growth -->
+        <div class="section">
+            <h2>Projected Equity Growth ({data.holding_years} Year Hold)</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Future Property Value</div>
+                    <div class="metric-value small">{_format_currency(final_property_value)}</div>
+                </div>
+                <div class="metric success">
+                    <div class="metric-label">Appreciation Gains</div>
+                    <div class="metric-value small">{_format_currency(total_appreciation)}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Principal Paid Down</div>
+                    <div class="metric-value small">{_format_currency(principal_paid)}</div>
+                </div>
+                <div class="metric success">
+                    <div class="metric-label">Future Equity</div>
+                    <div class="metric-value small">{_format_currency(final_equity)}</div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--gray-700);">Equity Growth Breakdown</h3>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <td>Current Equity</td>
+                        <td class="text-right">{_format_currency(current_equity)}</td>
+                    </tr>
+                    <tr>
+                        <td>+ Principal Paydown</td>
+                        <td class="text-right">{_format_currency(principal_paid)}</td>
+                    </tr>
+                    <tr>
+                        <td>+ Appreciation</td>
+                        <td class="text-right">{_format_currency(total_appreciation)}</td>
+                    </tr>
+                    <tr class="highlight-green">
+                        <td><strong>Future Equity (Year {data.holding_years})</strong></td>
+                        <td class="text-right"><strong>{_format_currency(final_equity)}</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Loan Summary -->
+        <div class="section">
+            <h2>Loan Paydown (Through Year {data.holding_years})</h2>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <td>Total Principal Paid</td>
+                        <td class="text-right">{_format_currency(amort.total_principal_paid if amort else 0)}</td>
+                    </tr>
+                    <tr>
+                        <td>Total Interest Paid</td>
+                        <td class="text-right">{_format_currency(amort.total_interest_paid if amort else 0)}</td>
+                    </tr>
+                    <tr>
+                        <td>Total PMI Paid</td>
+                        <td class="text-right">{_format_currency(amort.total_pmi_paid if amort else 0)}</td>
+                    </tr>
+                    <tr>
+                        <td>Interest-to-Principal Ratio</td>
+                        <td class="text-right">{(amort.interest_to_principal_ratio if amort else 0):.2f}</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>Remaining Balance (Year {data.holding_years})</strong></td>
+                        <td class="text-right"><strong>{_format_currency(final_loan_balance)}</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <footer>
+            <p>Generated by Real Estate Investment Simulator</p>
+            <p>This analysis is for informational purposes only and should not be considered financial advice.</p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+
+    return html
+
+
+# =============================================================================
+# Main Entry Points
+# =============================================================================
+
+def generate_html_report(data: ReportData) -> str:
+    """Generate a complete HTML summary report from the analysis data.
+
+    Delegates to mode-specific generators based on is_existing_property flag.
     """
-
-
-def _format_currency(value: float) -> str:
-    """Format a number as currency."""
-    if value < 0:
-        return f"-${abs(value):,.0f}"
-    return f"${value:,.0f}"
+    if data.is_existing_property:
+        return _generate_existing_property_report(data)
+    else:
+        return _generate_new_purchase_report(data)
 
 
 def save_and_open_report(data: ReportData, filepath: Optional[str] = None) -> str:
@@ -728,9 +1233,12 @@ def save_and_open_report(data: ReportData, filepath: Optional[str] = None) -> st
     """
     html = generate_html_report(data)
 
+    # Determine appropriate filename prefix based on mode
+    prefix = 'rei_existing_' if data.is_existing_property else 'rei_purchase_'
+
     if filepath is None:
         # Create temp file that won't be deleted immediately
-        fd, filepath = tempfile.mkstemp(suffix='.html', prefix='rei_analysis_')
+        fd, filepath = tempfile.mkstemp(suffix='.html', prefix=prefix)
         with open(fd, 'w', encoding='utf-8') as f:
             f.write(html)
     else:
