@@ -1,6 +1,7 @@
 """GUI components for the Recurring Costs tab."""
 
 import customtkinter as ctk
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 from .widgets import LabeledEntry, TooltipButton
@@ -304,8 +305,6 @@ class RecurringCostsTab(ctk.CTkFrame):
 
     def clear_chart(self):
         """Clear the current chart and reset data."""
-        import matplotlib.pyplot as plt
-
         self.params = None
         self.schedule = None
         if self.canvas is not None:
@@ -431,8 +430,6 @@ class RecurringCostsTab(ctk.CTkFrame):
 
     def _update_plot(self, *args):
         """Update the displayed plot based on selection."""
-        import matplotlib.pyplot as plt
-
         if self.schedule is None:
             return
 
@@ -467,7 +464,6 @@ class RecurringCostsTab(ctk.CTkFrame):
         self.toolbar_frame = ctk.CTkFrame(self.canvas_frame, fg_color="transparent")
         self.toolbar_frame.pack(fill="x")
         self.toolbar = NavigationToolbar2Tk(self.canvas, self.toolbar_frame)
-        self.toolbar.update()
 
     def _create_waterfall_plot(self):
         """Create the true cost waterfall plot from current data."""

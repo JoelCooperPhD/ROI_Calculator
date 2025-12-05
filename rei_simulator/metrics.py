@@ -42,26 +42,3 @@ def calculate_irr(cash_flows: list[float]) -> float:
         return float(irr)
     except (ValueError, RuntimeWarning):
         return 0.0
-
-
-def calculate_npv(cash_flows: list[float], discount_rate: float) -> float:
-    """
-    Calculate Net Present Value (NPV) of cash flows.
-
-    NPV is the sum of discounted future cash flows minus the initial investment.
-    A positive NPV indicates the investment exceeds the required return.
-
-    Args:
-        cash_flows: List of cash flows by year (first element is initial investment)
-        discount_rate: Required rate of return as decimal
-
-    Returns:
-        Net Present Value
-
-    Formula:
-        NPV = Σ (CF_t / (1 + r)^t) for t = 0 to n
-    """
-    try:
-        return float(npf.npv(discount_rate, cash_flows))
-    except (ValueError, RuntimeWarning):
-        return 0.0

@@ -20,14 +20,6 @@ from .formulas import calculate_future_value
 
 
 @dataclass
-class YearlyCashFlow:
-    """Cash flow data for a single year (from RE investment)."""
-    year: int
-    net_cash_flow: float  # Positive = income, negative = capital required
-    cumulative_cash_flow: float
-
-
-@dataclass
 class AlternativeComparison:
     """Results of S&P 500 vs real estate comparison."""
     # RE investment results

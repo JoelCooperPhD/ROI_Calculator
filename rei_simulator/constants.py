@@ -14,14 +14,10 @@ All values are based on US tax law and real estate conventions as of 2024.
 # Reference: IRS Publication 946, MACRS depreciation tables
 DEPRECIATION_YEARS_RESIDENTIAL = 27.5
 
-# Commercial property depreciation (not currently used, but for reference)
-DEPRECIATION_YEARS_COMMERCIAL = 39.0
-
-# Typical land-to-building ratio for depreciation basis
+# Typical building-to-land ratio for depreciation basis
 # The IRS requires separating land value (not depreciable) from building value
 # 80% building / 20% land is a common conservative default
 BUILDING_VALUE_RATIO = 0.80
-LAND_VALUE_RATIO = 0.20
 
 # =============================================================================
 # PMI (PRIVATE MORTGAGE INSURANCE) CONSTANTS
@@ -30,12 +26,6 @@ LAND_VALUE_RATIO = 0.20
 # LTV threshold above which PMI is typically required
 # Conventional loans require PMI when LTV > 80%
 PMI_LTV_THRESHOLD = 0.80
-
-# LTV at which PMI can be cancelled (by request to lender)
-PMI_CANCELLATION_LTV = 0.80
-
-# LTV at which PMI must be automatically cancelled (Homeowners Protection Act)
-PMI_AUTO_CANCELLATION_LTV = 0.78
 
 # =============================================================================
 # TAX RATE CONSTANTS
@@ -48,16 +38,6 @@ DEPRECIATION_RECAPTURE_RATE = 0.25
 # QBI (Qualified Business Income) deduction rate under Section 199A
 # Rental real estate may qualify for the 20% deduction if certain conditions met
 QBI_DEDUCTION_RATE = 0.20
-
-# Long-term capital gains rates (for reference)
-# Actual rate depends on taxpayer's income bracket
-LTCG_RATE_0_PERCENT_THRESHOLD = 0.00  # Lowest bracket
-LTCG_RATE_15_PERCENT = 0.15  # Most common bracket
-LTCG_RATE_20_PERCENT = 0.20  # Highest bracket
-
-# Net Investment Income Tax (NIIT) for high earners
-# Added on top of capital gains for those above threshold
-NIIT_RATE = 0.038
 
 # =============================================================================
 # DEFAULT ASSUMPTIONS
@@ -85,9 +65,6 @@ DEFAULT_SELLING_COST_PERCENT = 0.06  # 6%
 # =============================================================================
 # LOAN CONSTANTS
 # =============================================================================
-
-# Standard loan term in years
-STANDARD_LOAN_TERM_YEARS = 30
 
 # Months per year (for converting annual to monthly rates)
 MONTHS_PER_YEAR = 12

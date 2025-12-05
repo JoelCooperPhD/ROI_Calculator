@@ -100,10 +100,3 @@ def save_config(config: dict[str, Any]) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=2)
-
-
-def update_section(section: str, values: dict[str, Any]) -> None:
-    """Update a specific section of the config and save."""
-    config = load_config()
-    config[section] = values
-    save_config(config)

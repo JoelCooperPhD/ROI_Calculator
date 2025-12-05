@@ -1,6 +1,7 @@
 """GUI components for Investment Summary analysis."""
 
 import customtkinter as ctk
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 from .widgets import LabeledEntry, LabeledCheckBox, TooltipButton
@@ -608,14 +609,11 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.plot_var = ctk.StringVar(value="Property vs S&P 500")
         self._new_purchase_plots = [
             "Property vs S&P 500",         # Should I buy this or invest in stocks?
-            "Profit Over Time",            # When do I break even?
             "Annual Cash Flow",            # Cash flow each year
             "Equity Growth",               # Equity vs loan balance
         ]
         self._existing_property_plots = [
             "Sell Now vs Hold",            # Should I sell or keep holding?
-            "Profit Over Time",            # When do I break even if I keep holding?
-            "Holding Period Analysis",     # How long should I hold before selling?
         ]
         self.plot_menu = ctk.CTkOptionMenu(
             select_frame,
@@ -631,13 +629,10 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             tooltip=(
                 "New Purchase mode charts:\n"
                 "• Property vs S&P 500: Compare returns to stocks\n"
-                "• Profit Over Time: Track cumulative profit\n"
                 "• Annual Cash Flow: Year-by-year cash flow\n"
                 "• Equity Growth: Equity vs loan balance\n\n"
-                "Existing Property mode charts:\n"
-                "• Sell Now vs Hold: Compare selling now vs holding\n"
-                "• Profit Over Time: Future profit if you keep it\n"
-                "• Holding Period Analysis: Optimal time to sell"
+                "Existing Property mode:\n"
+                "• Sell Now vs Hold: Compare selling now vs holding"
             ),
             tooltip_title="Chart Options",
         )
@@ -655,8 +650,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
 
     def clear_chart(self):
         """Clear the current chart and reset data."""
-        import matplotlib.pyplot as plt
-
         self.summary = None
         if self.canvas is not None:
             fig = self.canvas.figure
@@ -774,8 +767,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
 
     def _update_plot(self, *args):
         """Update the displayed plot based on selection."""
-        import matplotlib.pyplot as plt
-
         if self.summary is None:
             return
 
@@ -794,14 +785,11 @@ class InvestmentSummaryTab(ctk.CTkFrame):
 
         plot_functions = {
             "Property vs S&P 500": plots.plot_investment_comparison,
-            "Profit Over Time": plots.plot_profit_timeline,
             "Annual Cash Flow": plots.plot_annual_cash_flow,
             "Equity Growth": plots.plot_equity_vs_loan,
         }
 
-        if plot_type == "Holding Period Analysis":
-            fig = plots.plot_holding_period_analysis(self._get_params())
-        elif plot_type == "Sell Now vs Hold" and self.sell_now_analysis is not None:
+        if plot_type == "Sell Now vs Hold" and self.sell_now_analysis is not None:
             fig = plots.plot_sell_now_vs_hold(self.sell_now_analysis)
         else:
             fig = plot_functions[plot_type](self.summary)
@@ -817,7 +805,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.toolbar_frame = ctk.CTkFrame(self.canvas_frame, fg_color="transparent")
         self.toolbar_frame.pack(fill="x")
         self.toolbar = NavigationToolbar2Tk(self.canvas, self.toolbar_frame)
-        self.toolbar.update()
 
     def load_config(self, cfg: dict) -> None:
         """Load field values from config."""

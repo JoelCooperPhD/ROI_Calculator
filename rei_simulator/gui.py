@@ -1,6 +1,7 @@
 """GUI components for the Real Estate Investment Simulator."""
 
 import customtkinter as ctk
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 from .amortization import (
@@ -311,38 +312,22 @@ class AmortizationTab(ctk.CTkFrame):
         select_frame = ctk.CTkFrame(self.plot_frame)
         select_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
 
-        plot_label = ctk.CTkLabel(select_frame, text="Select Plot:")
-        plot_label.pack(side="left", padx=(10, 10))
-
-        self.plot_var = ctk.StringVar(value="Total Monthly Cost")
-        self.plot_menu = ctk.CTkOptionMenu(
+        # Chart title - no dropdown needed since there's only one chart
+        chart_title = ctk.CTkLabel(
             select_frame,
-            variable=self.plot_var,
-            values=[
-                "Total Monthly Cost",      # What will I pay each month?
-                "Payment Breakdown",       # Where does my payment go?
-                "Balance Over Time",       # How fast does my loan shrink?
-                "LTV Over Time",           # When can I drop PMI?
-            ],
-            command=self._update_plot,
-            width=200
+            text="Total Monthly Cost Breakdown",
+            font=ctk.CTkFont(size=14, weight="bold")
         )
-        self.plot_menu.pack(side="left", padx=10)
+        chart_title.pack(side="left", padx=10)
 
         plot_tooltip = TooltipButton(
             select_frame,
             tooltip=(
-                "Available charts:\n\n"
-                "• Total Monthly Cost: Your complete monthly payment "
-                "over time, including P&I, taxes, insurance, PMI\n\n"
-                "• Payment Breakdown: See how each payment splits "
-                "between principal and interest\n\n"
-                "• Balance Over Time: Watch your loan balance decrease "
-                "and equity grow\n\n"
-                "• LTV Over Time: Track loan-to-value ratio to see "
-                "when you can drop PMI (at 80%)"
+                "Your complete monthly payment over time, "
+                "including principal, interest, taxes, insurance, PMI, and HOA.\n\n"
+                "Shows how each component contributes to your total housing cost."
             ),
-            tooltip_title="Chart Options",
+            tooltip_title="Total Monthly Cost",
         )
         plot_tooltip.pack(side="left", padx=(0, 10))
 
@@ -622,9 +607,7 @@ class AmortizationTab(ctk.CTkFrame):
             pass
 
     def _update_plot(self, *args):
-        """Update the displayed plot based on selection."""
-        import matplotlib.pyplot as plt
-
+        """Update the displayed plot."""
         if self.schedule is None:
             return
 
@@ -638,20 +621,10 @@ class AmortizationTab(ctk.CTkFrame):
         if self.toolbar_frame is not None:
             self.toolbar_frame.destroy()
 
-        # Create new figure based on selection
-        plot_type = self.plot_var.get()
-
         # Get holding period for chart truncation (if set)
         max_years = getattr(self, '_holding_period_years', None)
 
-        plot_functions = {
-            "Total Monthly Cost": plots.plot_total_monthly_cost,
-            "Payment Breakdown": plots.plot_payment_breakdown,
-            "Balance Over Time": plots.plot_balance_over_time,
-            "LTV Over Time": plots.plot_ltv_over_time,
-        }
-
-        fig = plot_functions[plot_type](self.schedule, max_years=max_years)
+        fig = plots.plot_total_monthly_cost(self.schedule, max_years=max_years)
         fig.tight_layout()
 
         # Embed in tkinter
@@ -663,7 +636,6 @@ class AmortizationTab(ctk.CTkFrame):
         self.toolbar_frame = ctk.CTkFrame(self.canvas_frame, fg_color="transparent")
         self.toolbar_frame.pack(fill="x")
         self.toolbar = NavigationToolbar2Tk(self.canvas, self.toolbar_frame)
-        self.toolbar.update()
 
     def set_analysis_mode(self, mode: str):
         """Set the analysis mode from external control (MainApplication)."""
@@ -691,8 +663,6 @@ class AmortizationTab(ctk.CTkFrame):
 
     def clear_chart(self):
         """Clear the current chart and reset schedule."""
-        import matplotlib.pyplot as plt
-
         self.schedule = None
         if self.canvas is not None:
             fig = self.canvas.figure
@@ -924,23 +894,34 @@ class MainApplication(ctk.CTk):
 
     def _on_close(self):
         """Handle window close - cleanup and exit quickly."""
-        import gc
-        import matplotlib.pyplot as plt
-
-        # Cancel any pending after callbacks to prevent delays
-        for after_id in self.tk.call('after', 'info'):
+        # 1. Clear all tab charts first (destroys canvas widgets and releases figure refs)
+        for tab in [self.amortization_tab, self.recurring_costs_tab,
+                    self.asset_building_tab, self.investment_summary_tab]:
             try:
-                self.after_cancel(after_id)
+                tab.clear_chart()
             except Exception:
                 pass
 
-        # Close matplotlib figures without triggering callbacks
+        # 2. Close any remaining matplotlib figures
         plt.close('all')
 
-        # Force garbage collection
-        gc.collect()
+        # 3. Cancel any pending after callbacks
+        # tk.call returns a tuple of after IDs
+        try:
+            after_ids = self.tk.call('after', 'info')
+            if after_ids:
+                # Handle both string and tuple returns from different Tcl versions
+                if isinstance(after_ids, str):
+                    after_ids = after_ids.split()
+                for after_id in after_ids:
+                    try:
+                        self.after_cancel(after_id)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
-        # Destroy immediately - quit() can cause delays
+        # 4. Destroy the window immediately
         self.destroy()
 
     def _on_analysis_mode_change(self, mode: str):

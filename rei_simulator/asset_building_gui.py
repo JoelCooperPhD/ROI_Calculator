@@ -1,6 +1,7 @@
 """GUI components for Asset Building analysis."""
 
 import customtkinter as ctk
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 from .widgets import LabeledEntry, TooltipButton
@@ -290,8 +291,6 @@ class AssetBuildingTab(ctk.CTkFrame):
 
     def clear_chart(self):
         """Clear the current chart and reset data."""
-        import matplotlib.pyplot as plt
-
         self.schedule = None
         if self.canvas is not None:
             fig = self.canvas.figure
@@ -392,8 +391,6 @@ class AssetBuildingTab(ctk.CTkFrame):
 
     def _update_plot(self, *args):
         """Update the displayed plot based on selection."""
-        import matplotlib.pyplot as plt
-
         if self.schedule is None:
             return
 
@@ -429,4 +426,3 @@ class AssetBuildingTab(ctk.CTkFrame):
         self.toolbar_frame = ctk.CTkFrame(self.canvas_frame, fg_color="transparent")
         self.toolbar_frame.pack(fill="x")
         self.toolbar = NavigationToolbar2Tk(self.canvas, self.toolbar_frame)
-        self.toolbar.update()
