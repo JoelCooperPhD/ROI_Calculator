@@ -231,10 +231,38 @@ def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedu
     balance = params.principal
     cumulative_interest = 0.0
     cumulative_principal = 0.0
+    loan_paid_off = False
 
     for period in range(1, params.total_periods + 1):
-        if balance <= 0:
-            break
+        # Months from start (for plotting)
+        months_from_start = period * (12 / periods_per_year)
+
+        if loan_paid_off or balance <= 0:
+            # Loan is paid off - continue with costs-only rows
+            loan_paid_off = True
+            total_monthly_cost = tax_periodic + insurance_periodic + hoa_periodic
+
+            records.append({
+                "period": period,
+                "payment_date_months": months_from_start,
+                "beginning_balance": 0,
+                "scheduled_payment": 0,
+                "principal_payment": 0,
+                "interest_payment": 0,
+                "extra_payment": 0,
+                "total_payment": 0,
+                "ending_balance": 0,
+                "cumulative_interest": cumulative_interest,
+                "cumulative_principal": cumulative_principal,
+                "equity": params.property_value,
+                "loan_to_value": 0,
+                "pmi_payment": 0,
+                "tax_payment": tax_periodic,
+                "insurance_payment": insurance_periodic,
+                "hoa_payment": hoa_periodic,
+                "total_monthly_cost": total_monthly_cost,
+            })
+            continue
 
         beginning_balance = balance
 
@@ -281,9 +309,6 @@ def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedu
         # Total payment
         total_payment = interest_payment + principal_payment
         total_monthly_cost = total_payment + pmi_this_period + tax_periodic + insurance_periodic + hoa_periodic
-
-        # Months from start (for plotting)
-        months_from_start = period * (12 / periods_per_year)
 
         records.append({
             "period": period,
