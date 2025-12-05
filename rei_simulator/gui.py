@@ -880,26 +880,26 @@ class MainApplication(ctk.CTk):
         self.tabview = ctk.CTkTabview(self.main_frame)
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-        # Add tabs - Investment Summary first!
-        self.tabview.add("Investment Summary")
-        self.tabview.add("Property & Loan")
-        self.tabview.add("Recurring Costs")
-        self.tabview.add("Asset Building")
+        # Add tabs - Summary first!
+        self.tabview.add("Summary")
+        self.tabview.add("Loan")
+        self.tabview.add("Expenses")
+        self.tabview.add("Growth")
 
-        # Populate Investment Summary tab (first - the overview)
-        self.investment_summary_tab = InvestmentSummaryTab(self.tabview.tab("Investment Summary"))
+        # Populate Summary tab (first - the overview)
+        self.investment_summary_tab = InvestmentSummaryTab(self.tabview.tab("Summary"))
         self.investment_summary_tab.pack(fill="both", expand=True)
 
-        # Populate property & loan tab (formerly "Amortization")
-        self.amortization_tab = AmortizationTab(self.tabview.tab("Property & Loan"))
+        # Populate Loan tab (loan amortization and payments)
+        self.amortization_tab = AmortizationTab(self.tabview.tab("Loan"))
         self.amortization_tab.pack(fill="both", expand=True)
 
-        # Populate recurring costs tab
-        self.recurring_costs_tab = RecurringCostsTab(self.tabview.tab("Recurring Costs"))
+        # Populate Expenses tab (recurring costs)
+        self.recurring_costs_tab = RecurringCostsTab(self.tabview.tab("Expenses"))
         self.recurring_costs_tab.pack(fill="both", expand=True)
 
-        # Populate asset building tab
-        self.asset_building_tab = AssetBuildingTab(self.tabview.tab("Asset Building"))
+        # Populate Growth tab (asset appreciation and equity building)
+        self.asset_building_tab = AssetBuildingTab(self.tabview.tab("Growth"))
         self.asset_building_tab.pack(fill="both", expand=True)
 
         # Load saved configuration
