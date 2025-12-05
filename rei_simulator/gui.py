@@ -92,69 +92,21 @@ class AmortizationTab(ctk.CTkFrame):
         )
         self.property_value_entry.pack(fill="x", pady=5)
 
-        # Recurring ownership costs (always apply, loan or not)
-        ownership_section = ctk.CTkLabel(
+        self.square_feet_entry = LabeledEntry(
             self.input_frame,
-            text="Ownership Costs",
-            font=ctk.CTkFont(size=14, weight="bold")
-        )
-        ownership_section.pack(anchor="w", pady=(15, 5))
-
-        ownership_note = ctk.CTkLabel(
-            self.input_frame,
-            text="(These flow to Recurring Costs tab)",
-            font=ctk.CTkFont(size=10),
-            text_color="gray"
-        )
-        ownership_note.pack(anchor="w")
-
-        self.property_tax_entry = LabeledEntry(
-            self.input_frame,
-            "Annual Property Tax ($):",
-            "4800",
+            "Square Feet:",
+            "",
             tooltip=(
-                "Annual property tax amount in dollars.\n\n"
-                "• Find this on your tax bill or county website\n"
-                "• $4,000-6,000/year typical for $400k home\n"
-                "• Varies widely by location\n\n"
-                "Note: Some areas reassess on sale, which may "
-                "increase taxes significantly."
+                "Property size in square feet.\n\n"
+                "Optional - used to calculate rent per sq ft "
+                "for comparison with market rates.\n\n"
+                "Typical ranges:\n"
+                "• $12-18/sq ft/year in affordable markets\n"
+                "• $24-48/sq ft/year in expensive markets"
             ),
-            tooltip_title="Annual Property Tax",
+            tooltip_title="Square Feet",
         )
-        self.property_tax_entry.pack(fill="x", pady=5)
-
-        self.insurance_entry = LabeledEntry(
-            self.input_frame,
-            "Annual Insurance ($):",
-            "1800",
-            tooltip=(
-                "Annual homeowners/landlord insurance premium.\n\n"
-                "• $1,500-2,500/year is typical\n"
-                "• Higher in disaster-prone areas\n"
-                "• Landlord policies cost 15-25% more\n\n"
-                "Get quotes from multiple insurers. "
-                "Consider umbrella policy for rentals."
-            ),
-            tooltip_title="Annual Insurance",
-        )
-        self.insurance_entry.pack(fill="x", pady=5)
-
-        self.hoa_entry = LabeledEntry(
-            self.input_frame,
-            "Monthly HOA ($):",
-            "0",
-            tooltip=(
-                "Monthly Homeowners Association fee.\n\n"
-                "• $0 for most single-family homes\n"
-                "• $200-500/month for condos\n"
-                "• Can be $1,000+ for luxury buildings\n\n"
-                "Check what HOA covers - may include "
-                "insurance, water, trash, exterior maintenance."
-            ),
-            tooltip_title="Monthly HOA",
-        )
-        self.hoa_entry.pack(fill="x", pady=5)
+        self.square_feet_entry.pack(fill="x", pady=5)
 
         # ===== LOAN SECTION =====
         # Has Loan checkbox - prominent toggle
@@ -539,12 +491,11 @@ class AmortizationTab(ctk.CTkFrame):
         else:
             purchase_price = property_value
 
-        # Property ownership costs (apply whether or not there's a loan)
-        # Property tax is entered as annual dollar amount, convert to rate
-        property_tax_annual = safe_positive_float(self.property_tax_entry.get(), 4800.0)
-        property_tax_rate = property_tax_annual / property_value if property_value > 0 else 0.012
-        insurance_annual = safe_positive_float(self.insurance_entry.get(), 0.0)
-        hoa_monthly = safe_positive_float(self.hoa_entry.get(), 0.0)
+        # Property ownership costs now come from Costs tab
+        # These are placeholders that will be overridden by set_ownership_costs()
+        property_tax_rate = getattr(self, '_property_tax_rate', 0.012)
+        insurance_annual = getattr(self, '_insurance_annual', 1800.0)
+        hoa_monthly = getattr(self, '_hoa_monthly', 0.0)
 
         # If no loan, set loan-related fields to zero
         if not self.has_loan_var.get():
@@ -685,6 +636,21 @@ class AmortizationTab(ctk.CTkFrame):
         """Set the holding period for chart display (from Investment Summary tab)."""
         self._holding_period_years = holding_years
 
+    def set_ownership_costs(
+        self,
+        property_tax_rate: float,
+        insurance_annual: float,
+        hoa_monthly: float,
+    ):
+        """Set ownership costs from the Costs tab."""
+        self._property_tax_rate = property_tax_rate
+        self._insurance_annual = insurance_annual
+        self._hoa_monthly = hoa_monthly
+
+    def get_square_feet(self) -> str:
+        """Get the square feet value for use by other tabs."""
+        return self.square_feet_entry.get()
+
     def clear_chart(self):
         """Clear the current chart and reset schedule."""
         import matplotlib.pyplot as plt
@@ -748,14 +714,12 @@ class AmortizationTab(ctk.CTkFrame):
     def load_config(self, cfg: dict) -> None:
         """Load field values from config."""
         self.property_value_entry.set(cfg.get("property_value", "400000"))
+        self.square_feet_entry.set(cfg.get("square_feet", ""))
         self.down_payment_entry.set(cfg.get("down_payment", "80000"))
         self.interest_rate_entry.set(cfg.get("interest_rate", "6.5"))
         self.loan_term_entry.set(cfg.get("loan_term", "30"))
         self.frequency_var.set(cfg.get("payment_frequency", "Monthly"))
-        self.property_tax_entry.set(cfg.get("property_tax_annual", "4800"))
-        self.insurance_entry.set(cfg.get("insurance_annual", "1800"))
         self.pmi_rate_entry.set(cfg.get("pmi_rate", "0.5"))
-        self.hoa_entry.set(cfg.get("hoa_monthly", "0"))
         self.closing_costs_entry.set(cfg.get("closing_costs", "8000"))
         self.extra_payment_entry.set(cfg.get("extra_payment", "0"))
         # Load analysis mode and update labels
@@ -777,14 +741,12 @@ class AmortizationTab(ctk.CTkFrame):
         """Save current field values to config dict."""
         return {
             "property_value": self.property_value_entry.get(),
+            "square_feet": self.square_feet_entry.get(),
             "down_payment": self.down_payment_entry.get(),
             "interest_rate": self.interest_rate_entry.get(),
             "loan_term": self.loan_term_entry.get(),
             "payment_frequency": self.frequency_var.get(),
-            "property_tax_annual": self.property_tax_entry.get(),
-            "insurance_annual": self.insurance_entry.get(),
             "pmi_rate": self.pmi_rate_entry.get(),
-            "hoa_monthly": self.hoa_entry.get(),
             "closing_costs": self.closing_costs_entry.get(),
             "extra_payment": self.extra_payment_entry.get(),
             "analysis_mode": self.analysis_mode_var.get(),
@@ -882,26 +844,26 @@ class MainApplication(ctk.CTk):
         self.tabview = ctk.CTkTabview(self.main_frame)
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-        # Add tabs - Summary first!
-        self.tabview.add("Summary")
-        self.tabview.add("Loan")
-        self.tabview.add("Expenses")
-        self.tabview.add("Growth")
+        # Add tabs - Analysis first, then input tabs
+        self.tabview.add("Analysis")
+        self.tabview.add("Property & Loan")
+        self.tabview.add("Costs")
+        self.tabview.add("Income & Growth")
 
-        # Populate Summary tab (first - the overview)
-        self.investment_summary_tab = InvestmentSummaryTab(self.tabview.tab("Summary"))
+        # Populate Analysis tab (first - the overview)
+        self.investment_summary_tab = InvestmentSummaryTab(self.tabview.tab("Analysis"))
         self.investment_summary_tab.pack(fill="both", expand=True)
 
-        # Populate Loan tab (loan amortization and payments)
-        self.amortization_tab = AmortizationTab(self.tabview.tab("Loan"))
+        # Populate Property & Loan tab (property and loan amortization)
+        self.amortization_tab = AmortizationTab(self.tabview.tab("Property & Loan"))
         self.amortization_tab.pack(fill="both", expand=True)
 
-        # Populate Expenses tab (recurring costs)
-        self.recurring_costs_tab = RecurringCostsTab(self.tabview.tab("Expenses"))
+        # Populate Costs tab (all ownership costs)
+        self.recurring_costs_tab = RecurringCostsTab(self.tabview.tab("Costs"))
         self.recurring_costs_tab.pack(fill="both", expand=True)
 
-        # Populate Growth tab (asset appreciation and equity building)
-        self.asset_building_tab = AssetBuildingTab(self.tabview.tab("Growth"))
+        # Populate Income & Growth tab (rental income and appreciation)
+        self.asset_building_tab = AssetBuildingTab(self.tabview.tab("Income & Growth"))
         self.asset_building_tab.pack(fill="both", expand=True)
 
         # Load saved configuration
@@ -988,6 +950,15 @@ class MainApplication(ctk.CTk):
             self.recurring_costs_tab.set_holding_period(holding_years)
             self.asset_building_tab.set_holding_period(holding_years)
 
+            # Get ownership costs from Costs tab (now the source of truth)
+            # and pass to Property & Loan tab before extracting loan params
+            ownership_costs = self.recurring_costs_tab.get_ownership_costs()
+            self.amortization_tab.set_ownership_costs(
+                property_tax_rate=ownership_costs["property_tax_rate"],
+                insurance_annual=ownership_costs["insurance_annual"],
+                hoa_monthly=ownership_costs["hoa_monthly"],
+            )
+
             # Extract loan params for other tabs
             loan_params = self.amortization_tab.get_loan_params()
             has_loan = self.amortization_tab.has_loan()
@@ -1048,6 +1019,12 @@ class MainApplication(ctk.CTk):
             self.asset_building_tab.set_analysis_mode(
                 is_existing_property=self.amortization_tab.is_existing_property_mode()
             )
+            # Pass tax treatment from Analysis tab (now the source of truth)
+            tax_treatment = self.investment_summary_tab.get_tax_treatment()
+            self.asset_building_tab.set_tax_treatment(
+                marginal_tax_rate=tax_treatment["marginal_tax_rate"],
+                depreciation_enabled=tax_treatment["depreciation_enabled"],
+            )
             self.asset_building_tab.calculate()
 
             # 4. Pass all data to Investment Summary tab (the capstone!)
@@ -1070,7 +1047,8 @@ class MainApplication(ctk.CTk):
                 pmi_annual=loan_params.pmi_rate * loan_params.principal if has_loan and loan_params.loan_to_value > 0.8 else 0,
             )
 
-            # Pass asset building params (operating costs flow from Recurring Costs → Asset Building → here)
+            # Pass asset building params (operating costs flow from Costs → Income & Growth → here)
+            # Tax treatment is now local to the Analysis tab
             self.investment_summary_tab.set_asset_building_params(
                 appreciation_rate=asset_params["appreciation_rate"],
                 monthly_rent=asset_params["monthly_rent"],
@@ -1079,10 +1057,6 @@ class MainApplication(ctk.CTk):
                 management_rate=asset_params["management_rate"],
                 maintenance_annual=asset_params["maintenance_annual"],
                 utilities_annual=asset_params["utilities_annual"],
-                # Tax benefits from Asset Building tab
-                marginal_tax_rate=asset_params["marginal_tax_rate"],
-                depreciation_enabled=asset_params["depreciation_enabled"],
-                qbi_deduction_enabled=asset_params["qbi_deduction_enabled"],
             )
 
             # Set analysis mode (existing property or new purchase)

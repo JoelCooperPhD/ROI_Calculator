@@ -81,7 +81,7 @@ class RecurringCostsTab(ctk.CTkFrame):
         # Title
         title = ctk.CTkLabel(
             self.input_frame,
-            text="Recurring Costs",
+            text="Costs",
             font=ctk.CTkFont(size=18, weight="bold")
         )
         title.pack(pady=(0, 10))
@@ -89,13 +89,64 @@ class RecurringCostsTab(ctk.CTkFrame):
         # Info label
         info = ctk.CTkLabel(
             self.input_frame,
-            text="Property value, taxes, insurance & HOA\nare pulled from Amortization tab.",
+            text="All recurring ownership costs in one place.",
             font=ctk.CTkFont(size=11),
             text_color="gray"
         )
         info.pack(pady=(0, 15))
 
-        # Maintenance section (unique to this tab)
+        # Fixed Costs Section (property tax, insurance, HOA)
+        self._create_section_header("Fixed Costs")
+
+        self.property_tax_entry = LabeledEntry(
+            self.input_frame,
+            "Annual Property Tax ($):",
+            "4800",
+            tooltip=(
+                "Annual property tax amount in dollars.\n\n"
+                "• Find this on your tax bill or county website\n"
+                "• $4,000-6,000/year typical for $400k home\n"
+                "• Varies widely by location\n\n"
+                "Note: Some areas reassess on sale, which may "
+                "increase taxes significantly."
+            ),
+            tooltip_title="Annual Property Tax",
+        )
+        self.property_tax_entry.pack(fill="x", pady=5)
+
+        self.insurance_entry = LabeledEntry(
+            self.input_frame,
+            "Annual Insurance ($):",
+            "1800",
+            tooltip=(
+                "Annual homeowners/landlord insurance premium.\n\n"
+                "• $1,500-2,500/year is typical\n"
+                "• Higher in disaster-prone areas\n"
+                "• Landlord policies cost 15-25% more\n\n"
+                "Get quotes from multiple insurers. "
+                "Consider umbrella policy for rentals."
+            ),
+            tooltip_title="Annual Insurance",
+        )
+        self.insurance_entry.pack(fill="x", pady=5)
+
+        self.hoa_entry = LabeledEntry(
+            self.input_frame,
+            "Monthly HOA ($):",
+            "0",
+            tooltip=(
+                "Monthly Homeowners Association fee.\n\n"
+                "• $0 for most single-family homes\n"
+                "• $200-500/month for condos\n"
+                "• Can be $1,000+ for luxury buildings\n\n"
+                "Check what HOA covers - may include "
+                "insurance, water, trash, exterior maintenance."
+            ),
+            tooltip_title="Monthly HOA",
+        )
+        self.hoa_entry.pack(fill="x", pady=5)
+
+        # Maintenance section
         self._create_section_header("Maintenance & Repairs")
 
         self.maintenance_pct_entry = LabeledEntry(
@@ -257,9 +308,14 @@ class RecurringCostsTab(ctk.CTkFrame):
             self.toolbar_frame = None
 
     def _get_params(self) -> PropertyCostParameters:
-        """Build parameters using data from Amortization tab + local inputs."""
+        """Build parameters using local inputs (this tab is now the source of truth for costs)."""
         # Use safe parsing for all inputs
         maintenance_pct = safe_percent(self.maintenance_pct_entry.get(), 0.01)  # default 1%
+
+        # Parse fixed costs from local fields
+        property_tax_annual = safe_positive_float(self.property_tax_entry.get(), 4800.0)
+        insurance_annual = safe_positive_float(self.insurance_entry.get(), 1800.0)
+        hoa_monthly = safe_positive_float(self.hoa_entry.get(), 0.0)
 
         # Default inflation rate for cost projections (each item can override)
         default_inflation = 0.03
@@ -286,21 +342,21 @@ class RecurringCostsTab(ctk.CTkFrame):
                 )
             )
 
-        # Insurance (from Amortization tab)
-        if self._insurance_annual > 0:
+        # Insurance (from local input)
+        if insurance_annual > 0:
             recurring_costs.append(
                 RecurringCostItem(
                     "Homeowners Insurance", CostCategory.INSURANCE,
-                    self._insurance_annual, 0.04, "Property and liability coverage"
+                    insurance_annual, 0.04, "Property and liability coverage"
                 )
             )
 
-        # Property Taxes (from Amortization tab)
-        if self._property_tax_rate > 0 and self._property_value > 0:
+        # Property Taxes (from local input)
+        if property_tax_annual > 0:
             recurring_costs.append(
                 RecurringCostItem(
                     "Property Taxes", CostCategory.TAXES,
-                    self._property_value * self._property_tax_rate, 0.02, "Annual property tax"
+                    property_tax_annual, 0.02, "Annual property tax"
                 )
             )
 
@@ -335,12 +391,12 @@ class RecurringCostsTab(ctk.CTkFrame):
                 RecurringCostItem("Internet", CostCategory.UTILITIES, internet, 0.02)
             )
 
-        # HOA (from Amortization tab)
-        if self._hoa_monthly > 0:
+        # HOA (from local input)
+        if hoa_monthly > 0:
             recurring_costs.append(
                 RecurringCostItem(
                     "HOA Fees", CostCategory.HOA,
-                    self._hoa_monthly * 12, 0.03, "Monthly HOA fees"
+                    hoa_monthly * 12, 0.03, "Monthly HOA fees"
                 )
             )
 
@@ -438,7 +494,13 @@ class RecurringCostsTab(ctk.CTkFrame):
 
     def load_config(self, cfg: dict) -> None:
         """Load field values from config."""
+        # Fixed costs (moved here from Property & Loan tab)
+        self.property_tax_entry.set(cfg.get("property_tax_annual", "4800"))
+        self.insurance_entry.set(cfg.get("insurance_annual", "1800"))
+        self.hoa_entry.set(cfg.get("hoa_monthly", "0"))
+        # Variable costs
         self.maintenance_pct_entry.set(cfg.get("maintenance_pct", "1.0"))
+        # Utilities
         self.electricity_entry.set(cfg.get("electricity", "1800"))
         self.gas_entry.set(cfg.get("gas", "1200"))
         self.water_entry.set(cfg.get("water", "720"))
@@ -448,7 +510,13 @@ class RecurringCostsTab(ctk.CTkFrame):
     def save_config(self) -> dict:
         """Save current field values to config dict."""
         return {
+            # Fixed costs
+            "property_tax_annual": self.property_tax_entry.get(),
+            "insurance_annual": self.insurance_entry.get(),
+            "hoa_monthly": self.hoa_entry.get(),
+            # Variable costs
             "maintenance_pct": self.maintenance_pct_entry.get(),
+            # Utilities
             "electricity": self.electricity_entry.get(),
             "gas": self.gas_entry.get(),
             "water": self.water_entry.get(),
@@ -482,4 +550,25 @@ class RecurringCostsTab(ctk.CTkFrame):
         return {
             "maintenance_annual": maintenance_annual,
             "utilities_annual": utilities_annual,
+        }
+
+    def get_ownership_costs(self) -> dict:
+        """Get ownership costs (tax, insurance, HOA) for use by other tabs.
+
+        Returns the fixed costs as entered in this tab.
+        This makes the Costs tab the single source of truth for these values.
+        """
+        property_tax_annual = safe_positive_float(self.property_tax_entry.get(), 4800.0)
+        insurance_annual = safe_positive_float(self.insurance_entry.get(), 1800.0)
+        hoa_monthly = safe_positive_float(self.hoa_entry.get(), 0.0)
+
+        # Calculate property tax rate (for LoanParameters compatibility)
+        property_tax_rate = property_tax_annual / self._property_value if self._property_value > 0 else 0.012
+
+        return {
+            "property_tax_annual": property_tax_annual,
+            "property_tax_rate": property_tax_rate,
+            "insurance_annual": insurance_annual,
+            "hoa_monthly": hoa_monthly,
+            "hoa_annual": hoa_monthly * 12,
         }

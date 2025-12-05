@@ -45,6 +45,10 @@ class AssetBuildingTab(ctk.CTkFrame):
         # Analysis mode
         self._is_existing_property: bool = False
 
+        # Tax treatment (set from Analysis tab)
+        self._marginal_tax_rate: float = 0.0
+        self._depreciation_enabled: bool = False
+
         # Create main layout - left inputs, right plots
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
@@ -109,12 +113,21 @@ class AssetBuildingTab(ctk.CTkFrame):
         """Set the analysis mode (existing property vs new purchase)."""
         self._is_existing_property = is_existing_property
 
+    def set_tax_treatment(
+        self,
+        marginal_tax_rate: float,
+        depreciation_enabled: bool,
+    ):
+        """Set tax treatment parameters from the Analysis tab."""
+        self._marginal_tax_rate = marginal_tax_rate
+        self._depreciation_enabled = depreciation_enabled
+
     def _create_input_form(self):
         """Create the input form for asset building parameters."""
         # Title
         title = ctk.CTkLabel(
             self.input_frame,
-            text="Asset Building",
+            text="Income & Growth",
             font=ctk.CTkFont(size=18, weight="bold")
         )
         title.pack(pady=(0, 10))
@@ -122,7 +135,7 @@ class AssetBuildingTab(ctk.CTkFrame):
         # Info label
         info = ctk.CTkLabel(
             self.input_frame,
-            text="Loan details from Amortization tab.\nOperating costs from Recurring Costs tab.",
+            text="Rental income and property appreciation.",
             font=ctk.CTkFont(size=11),
             text_color="gray"
         )
@@ -165,36 +178,6 @@ class AssetBuildingTab(ctk.CTkFrame):
             tooltip_title="Monthly Rent",
         )
         self.monthly_rent_entry.pack(fill="x", pady=5)
-
-        self.square_feet_entry = LabeledEntry(
-            self.input_frame,
-            "Square Feet:",
-            "",
-            tooltip=(
-                "Property size in square feet.\n\n"
-                "Optional - used to calculate rent per sq ft "
-                "for comparison with market rates.\n\n"
-                "Typical ranges:\n"
-                "• $12-18/sq ft/year in affordable markets\n"
-                "• $24-48/sq ft/year in expensive markets"
-            ),
-            tooltip_title="Square Feet",
-        )
-        self.square_feet_entry.pack(fill="x", pady=5)
-
-        # Small label showing $/sq ft (only visible when sq ft > 0)
-        self.rent_per_sqft_label = ctk.CTkLabel(
-            self.input_frame,
-            text="",
-            font=ctk.CTkFont(size=11),
-            text_color="gray",
-            anchor="e"
-        )
-        self.rent_per_sqft_label.pack(fill="x", pady=(0, 5))
-
-        # Bind updates to recalculate $/sq ft
-        self.monthly_rent_entry.entry.bind("<KeyRelease>", self._update_rent_per_sqft)
-        self.square_feet_entry.entry.bind("<KeyRelease>", self._update_rent_per_sqft)
 
         self.rent_growth_entry = LabeledEntry(
             self.input_frame,
@@ -243,52 +226,6 @@ class AssetBuildingTab(ctk.CTkFrame):
         )
         self.management_rate_entry.pack(fill="x", pady=5)
 
-        # Tax Benefits Section
-        self._create_section_header("Tax Benefits")
-
-        self.tax_rate_entry = LabeledEntry(
-            self.input_frame,
-            "Marginal Tax Rate (%):",
-            "0",
-            tooltip=(
-                "Your marginal (highest) income tax rate.\n\n"
-                "• 22-24% for middle incomes\n"
-                "• 32-35% for higher incomes\n"
-                "• Include state taxes if applicable\n\n"
-                "Used to calculate tax benefits from mortgage "
-                "interest deduction and depreciation.\n\n"
-                "Set to 0% to ignore tax benefits."
-            ),
-            tooltip_title="Marginal Tax Rate",
-        )
-        self.tax_rate_entry.pack(fill="x", pady=5)
-
-        # Depreciation checkbox
-        self.depreciation_var = ctk.BooleanVar(value=False)
-        self.depreciation_check = ctk.CTkCheckBox(
-            self.input_frame,
-            text="Enable Depreciation (27.5 yr)",
-            variable=self.depreciation_var
-        )
-        self.depreciation_check.pack(anchor="w", pady=5)
-
-        # QBI Deduction checkbox
-        self.qbi_var = ctk.BooleanVar(value=False)
-        self.qbi_check = ctk.CTkCheckBox(
-            self.input_frame,
-            text="QBI Deduction (Section 199A)",
-            variable=self.qbi_var
-        )
-        self.qbi_check.pack(anchor="w", pady=5)
-
-        self.qbi_info = ctk.CTkLabel(
-            self.input_frame,
-            text="Deduct 20% of net rental income",
-            font=ctk.CTkFont(size=10),
-            text_color="gray"
-        )
-        self.qbi_info.pack(anchor="w", padx=(25, 0))
-
 
     def _create_section_header(self, text: str):
         """Create a section header label."""
@@ -298,19 +235,6 @@ class AssetBuildingTab(ctk.CTkFrame):
             font=ctk.CTkFont(size=14, weight="bold")
         )
         label.pack(anchor="w", pady=(15, 5))
-
-    def _update_rent_per_sqft(self, event=None):
-        """Update the rent per sq ft display (annual basis)."""
-        try:
-            rent = float(self.monthly_rent_entry.get() or 0)
-            sqft = float(self.square_feet_entry.get() or 0)
-            if sqft > 0 and rent > 0:
-                annual_per_sqft = (rent * 12) / sqft
-                self.rent_per_sqft_label.configure(text=f"${annual_per_sqft:.2f}/sq ft/yr")
-            else:
-                self.rent_per_sqft_label.configure(text="")
-        except ValueError:
-            self.rent_per_sqft_label.configure(text="")
 
     def _create_plot_area(self):
         """Create the plot selection and display area."""
@@ -399,8 +323,9 @@ class AssetBuildingTab(ctk.CTkFrame):
             utilities_annual=self._utilities_annual,
             # No cost inflation - assumes rent growth covers cost increases
             cost_inflation_rate=0.0,
-            marginal_tax_rate=safe_percent(self.tax_rate_entry.get(), 0.0),
-            depreciation_enabled=self.depreciation_var.get(),
+            # Tax treatment from Analysis tab
+            marginal_tax_rate=self._marginal_tax_rate,
+            depreciation_enabled=self._depreciation_enabled,
             is_existing_property=self._is_existing_property,
         )
 
@@ -427,37 +352,24 @@ class AssetBuildingTab(ctk.CTkFrame):
             # Operating costs from Recurring Costs tab (single source of truth)
             "maintenance_annual": self._maintenance_annual,
             "utilities_annual": self._utilities_annual,
-            # Tax benefits
-            "marginal_tax_rate": safe_percent(self.tax_rate_entry.get(), 0.0),
-            "depreciation_enabled": self.depreciation_var.get(),
-            "qbi_deduction_enabled": self.qbi_var.get(),
         }
 
     def load_config(self, cfg: dict) -> None:
         """Load field values from config."""
         self.appreciation_rate_entry.set(cfg.get("appreciation_rate", "3.0"))
         self.monthly_rent_entry.set(cfg.get("monthly_rent", "0"))
-        self.square_feet_entry.set(cfg.get("square_feet", ""))
         self.rent_growth_entry.set(cfg.get("rent_growth", "3.0"))
         self.vacancy_rate_entry.set(cfg.get("vacancy_rate", "5.0"))
         self.management_rate_entry.set(cfg.get("management_rate", "0"))
-        self.tax_rate_entry.set(cfg.get("tax_rate", "0"))
-        self.depreciation_var.set(cfg.get("depreciation_enabled", False))
-        self.qbi_var.set(cfg.get("qbi_deduction_enabled", False))
-        self._update_rent_per_sqft()
 
     def save_config(self) -> dict:
         """Save current field values to config dict."""
         return {
             "appreciation_rate": self.appreciation_rate_entry.get(),
             "monthly_rent": self.monthly_rent_entry.get(),
-            "square_feet": self.square_feet_entry.get(),
             "rent_growth": self.rent_growth_entry.get(),
             "vacancy_rate": self.vacancy_rate_entry.get(),
             "management_rate": self.management_rate_entry.get(),
-            "tax_rate": self.tax_rate_entry.get(),
-            "depreciation_enabled": self.depreciation_var.get(),
-            "qbi_deduction_enabled": self.qbi_var.get(),
         }
 
     def _update_plot(self, *args):

@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from enum import Enum
 import pandas as pd
 
+from .constants import PMI_LTV_THRESHOLD, LOAN_PAYOFF_TOLERANCE
+from .formulas import calculate_periodic_payment as _calculate_periodic_payment
+
 
 class PaymentFrequency(Enum):
     """Payment frequency options."""
@@ -73,7 +76,7 @@ class LoanParameters:
     @property
     def requires_pmi(self) -> bool:
         """PMI typically required when LTV > 80% (based on purchase price)."""
-        return self.loan_to_value > 0.80
+        return self.loan_to_value > PMI_LTV_THRESHOLD
 
     @property
     def forced_appreciation(self) -> float:
@@ -127,7 +130,7 @@ class AmortizationSchedule:
     @property
     def payoff_period(self) -> int:
         """Period number when loan is paid off (may be early with extra payments)."""
-        final_row = self.schedule[self.schedule["ending_balance"] <= 0.01]
+        final_row = self.schedule[self.schedule["ending_balance"] <= LOAN_PAYOFF_TOLERANCE]
         if len(final_row) > 0:
             return final_row.index[0]
         return len(self.schedule)
@@ -149,13 +152,11 @@ def calculate_periodic_payment(principal: float, periodic_rate: float,
         P = Principal
         r = Periodic interest rate
         n = Total number of periods
-    """
-    if periodic_rate == 0:
-        return principal / total_periods
 
-    numerator = periodic_rate * (1 + periodic_rate) ** total_periods
-    denominator = (1 + periodic_rate) ** total_periods - 1
-    return principal * (numerator / denominator)
+    Note: This is a thin wrapper around formulas.calculate_periodic_payment
+    for backward compatibility. New code should import from formulas directly.
+    """
+    return _calculate_periodic_payment(principal, periodic_rate, total_periods)
 
 
 def generate_amortization_schedule(params: LoanParameters, analysis_years: int = None) -> AmortizationSchedule:
@@ -312,7 +313,7 @@ def generate_amortization_schedule(params: LoanParameters, analysis_years: int =
         # Calculate PMI based on current balance (more accurate than original principal)
         # PMI is removed when LTV drops to/below 80%
         current_ltv = ending_balance / params.property_value if params.property_value > 0 else 1.0
-        if current_ltv > 0.80 and params.pmi_rate > 0:
+        if current_ltv > PMI_LTV_THRESHOLD and params.pmi_rate > 0:
             # PMI calculated on current loan balance, not original principal
             pmi_this_period = params.pmi_rate * beginning_balance / periods_per_year
         else:

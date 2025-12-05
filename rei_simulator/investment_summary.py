@@ -12,11 +12,18 @@ Provides:
 
 from dataclasses import dataclass
 import numpy as np
-import numpy_financial as npf
 import pandas as pd
 from typing import Optional
 
-from .amortization import calculate_periodic_payment
+from .constants import (
+    DEPRECIATION_YEARS_RESIDENTIAL,
+    BUILDING_VALUE_RATIO,
+    QBI_DEDUCTION_RATE,
+)
+from .formulas import calculate_periodic_payment
+from .metrics import calculate_irr, calculate_investment_grade
+from .comparison import generate_alternative_comparison
+from .tax import calculate_sale_tax as _calculate_sale_tax, SaleTaxEstimate
 
 
 @dataclass
@@ -106,14 +113,14 @@ class InvestmentParameters:
     @property
     def building_value_for_depreciation(self) -> float:
         """Building value for depreciation (typically 80% of property value)."""
-        return self.property_value * 0.80  # Land typically 20%
+        return self.property_value * BUILDING_VALUE_RATIO
 
     @property
     def annual_depreciation(self) -> float:
         """Annual depreciation amount for tax purposes."""
         if not self.depreciation_enabled:
             return 0.0
-        return self.building_value_for_depreciation / 27.5
+        return self.building_value_for_depreciation / DEPRECIATION_YEARS_RESIDENTIAL
 
 
 @dataclass
@@ -212,138 +219,74 @@ def generate_amortization_balances(
         Tuple of (balances, interest_by_year) where:
         - balances: list of year-end loan balances
         - interest_by_year: list of interest paid each year
+
+    Uses vectorized numpy operations for efficiency.
     """
+    if loan_amount <= 0 or annual_rate <= 0:
+        return [0.0] * max_years, [0.0] * max_years
+
     monthly_rate = annual_rate / 12
     total_payments = term_years * 12
 
     # Use shared payment calculation
     payment = calculate_periodic_payment(loan_amount, monthly_rate, total_payments)
 
-    balances = []
-    interest_by_year = []
-    balance = loan_amount
+    # Calculate all monthly balances at once using the amortization formula:
+    # B(n) = P * ((1+r)^N - (1+r)^n) / ((1+r)^N - 1)
+    # where P = principal, r = monthly rate, N = total periods, n = period number
+    total_months = min(max_years * 12, total_payments)
+    months = np.arange(1, total_months + 1)
 
-    for year in range(1, max_years + 1):
-        year_interest = 0.0
-        for month in range(12):
-            if balance <= 0:
-                break
-            interest = balance * monthly_rate
-            year_interest += interest
-            principal = min(payment - interest, balance)
-            balance = max(0, balance - principal)
-        balances.append(balance)
+    rate_factor = (1 + monthly_rate) ** total_payments
+    monthly_rate_factors = (1 + monthly_rate) ** months
+
+    # Remaining balance after each month
+    monthly_balances = loan_amount * (rate_factor - monthly_rate_factors) / (rate_factor - 1)
+    monthly_balances = np.maximum(monthly_balances, 0)
+
+    # Pad with zeros if max_years exceeds loan term
+    if max_years * 12 > total_payments:
+        padding = np.zeros(max_years * 12 - total_payments)
+        monthly_balances = np.concatenate([monthly_balances, padding])
+
+    # Get year-end balances (every 12th value)
+    balances = monthly_balances[11::12].tolist()
+
+    # Ensure we have exactly max_years entries
+    while len(balances) < max_years:
+        balances.append(0.0)
+
+    # Calculate interest paid each year
+    # Interest = sum of (balance * monthly_rate) for each month in the year
+    # Using: beginning balance for each month * rate
+    interest_by_year = []
+    prev_balance = loan_amount
+
+    for year_idx in range(max_years):
+        start_month = year_idx * 12
+        end_month = min(start_month + 12, len(monthly_balances))
+
+        if start_month >= len(monthly_balances) or prev_balance <= 0:
+            interest_by_year.append(0.0)
+            prev_balance = 0.0
+            continue
+
+        # Beginning balances for each month in this year
+        if start_month == 0:
+            year_beginning_balances = np.concatenate([[loan_amount], monthly_balances[start_month:end_month-1]])
+        else:
+            year_beginning_balances = monthly_balances[start_month-1:end_month-1]
+
+        year_beginning_balances = np.maximum(year_beginning_balances, 0)
+        year_interest = float(np.sum(year_beginning_balances * monthly_rate))
         interest_by_year.append(year_interest)
+        prev_balance = balances[year_idx] if year_idx < len(balances) else 0.0
 
     return balances, interest_by_year
 
 
-def calculate_irr(cash_flows: list[float]) -> float:
-    """
-    Calculate Internal Rate of Return.
-
-    Cash flows should be:
-    - Negative for money out (initial investment)
-    - Positive for money in (cash flow, sale proceeds)
-    """
-    try:
-        irr = npf.irr(cash_flows)
-        if np.isnan(irr) or np.isinf(irr):
-            return 0.0
-        return irr
-    except (ValueError, RuntimeWarning):
-        return 0.0
-
-
-def calculate_investment_grade(
-    irr: float,
-    equity_multiple: float,
-    outperformance: float,
-    alternative_return_rate: float = 0.10
-) -> tuple[str, str]:
-    """
-    Assign an investment grade based on full hold period performance vs stocks.
-
-    The grade reflects whether this investment beats the stock market alternative
-    over the entire holding period, not just Year 1 cash flow.
-
-    Args:
-        irr: Internal Rate of Return for the full holding period
-        equity_multiple: Total value / Initial investment at end of hold
-        outperformance: Dollar amount this beats (or loses to) stock alternative
-        alternative_return_rate: The stock market benchmark rate (default 10%)
-
-    Returns (grade, rationale)
-    """
-    score = 0
-    reasons = []
-
-    # IRR vs benchmark (primary factor - 50 points max)
-    # Compare to the stock market alternative rate
-    irr_spread = irr - alternative_return_rate
-
-    if irr_spread >= 0.05:  # 5%+ above stocks
-        score += 50
-        reasons.append(f"IRR {irr*100:.1f}% beats stocks by 5%+")
-    elif irr_spread >= 0.02:  # 2-5% above stocks
-        score += 40
-        reasons.append(f"IRR {irr*100:.1f}% beats stocks by 2-5%")
-    elif irr_spread >= 0:  # 0-2% above stocks
-        score += 30
-        reasons.append(f"IRR {irr*100:.1f}% slightly beats stocks")
-    elif irr_spread >= -0.02:  # 0-2% below stocks
-        score += 20
-        reasons.append(f"IRR {irr*100:.1f}% slightly below stocks")
-    elif irr_spread >= -0.05:  # 2-5% below stocks
-        score += 10
-        reasons.append(f"IRR {irr*100:.1f}% underperforms stocks")
-    else:  # 5%+ below stocks
-        reasons.append(f"IRR {irr*100:.1f}% significantly underperforms")
-
-    # Equity multiple (30 points max)
-    # How many times did you multiply your initial investment?
-    if equity_multiple >= 3.0:
-        score += 30
-        reasons.append(f"{equity_multiple:.1f}x equity multiple")
-    elif equity_multiple >= 2.0:
-        score += 25
-        reasons.append(f"{equity_multiple:.1f}x equity multiple")
-    elif equity_multiple >= 1.5:
-        score += 20
-        reasons.append(f"{equity_multiple:.1f}x equity multiple")
-    elif equity_multiple >= 1.2:
-        score += 15
-        reasons.append(f"{equity_multiple:.1f}x equity multiple")
-    elif equity_multiple >= 1.0:
-        score += 10
-        reasons.append(f"{equity_multiple:.1f}x (minimal gain)")
-    else:
-        reasons.append(f"{equity_multiple:.1f}x (loss of principal)")
-
-    # Outperformance vs stocks (20 points max)
-    # Did you actually beat the stock alternative in dollars?
-    if outperformance > 0:
-        score += 20
-        reasons.append(f"Beats stocks by ${outperformance:,.0f}")
-    elif outperformance > -5000:
-        score += 10
-        reasons.append("Roughly matches stocks")
-    else:
-        reasons.append(f"Underperforms stocks by ${abs(outperformance):,.0f}")
-
-    # Assign grade based on total score (max 100)
-    if score >= 85:
-        grade = "A - Excellent"
-    elif score >= 70:
-        grade = "B - Good"
-    elif score >= 50:
-        grade = "C - Fair"
-    elif score >= 30:
-        grade = "D - Poor"
-    else:
-        grade = "F - Avoid"
-
-    return grade, "; ".join(reasons)
+# Note: calculate_irr and calculate_investment_grade are now imported from metrics.py
+# These functions used to be defined here but are now centralized in the metrics module
 
 
 def generate_investment_summary(params: InvestmentParameters) -> InvestmentSummary:
@@ -445,7 +388,7 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
 
         # QBI deduction is 20% of positive taxable rental income
         if params.qbi_deduction_enabled and taxable_rental_income > 0:
-            qbi_deduction = taxable_rental_income * 0.20
+            qbi_deduction = taxable_rental_income * QBI_DEDUCTION_RATE
             qbi_tax_benefit = qbi_deduction * params.marginal_tax_rate
         else:
             qbi_deduction = 0.0
@@ -525,62 +468,23 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
     # ==========================================================================
     # S&P COMPARISON WITH MATCHED CASH FLOWS
     # ==========================================================================
-    # This is the fair comparison: What if we made the same cash deposits/withdrawals
-    # to S&P instead of to real estate?
-    #
-    # Logic:
-    # - Start with initial investment in S&P
-    # - Each year, grow by S&P return rate
-    # - If RE had negative cash flow (capital required), add that to S&P
-    # - If RE had positive cash flow, withdraw that from S&P (for lifestyle parity)
-    # - At the end, we also need to account for the "sale" - in S&P world, we just
-    #   have the balance; in RE world, we get sale proceeds
-    #
-    # The comparison becomes:
-    # RE outcome = sale proceeds (already includes cumulative cash flows implicitly
-    #              because we're comparing total profit which accounts for them)
-    # S&P outcome = final S&P balance
-    # ==========================================================================
-
-    s_and_p_balance = params.total_initial_investment
-    cumulative_negative_cash_flows = 0.0
-    total_positive_cash_flows = 0.0
-
-    for proj in yearly_projections:
-        # Grow last year's balance by S&P return
-        s_and_p_balance *= (1 + params.alternative_return_rate)
-
-        # Match the cash flows from RE investment
-        if proj.net_cash_flow < 0:
-            # RE required capital injection - this money would have gone into S&P
-            capital_injection = abs(proj.net_cash_flow)
-            s_and_p_balance += capital_injection
-            cumulative_negative_cash_flows += capital_injection
-        else:
-            # RE generated cash - withdraw same amount from S&P for fair comparison
-            # This represents: "I'd need this income either way"
-            withdrawal = proj.net_cash_flow
-            s_and_p_balance -= withdrawal
-            total_positive_cash_flows += withdrawal
-
-    # Total capital deployed = initial + all additional capital injections
-    total_capital_deployed = params.total_initial_investment + cumulative_negative_cash_flows
-
-    # The matched S&P comparison
-    alternative_final_value = s_and_p_balance
-    # S&P profit = final balance - total capital deployed + withdrawals taken
-    # (withdrawals were "income" just like positive RE cash flow)
-    alternative_profit = alternative_final_value + total_positive_cash_flows - total_capital_deployed
-
-    # RE total outcome for comparison = sale proceeds + positive cash flows - total deployed
-    # This equals total_profit when calculated correctly
-    outperformance = total_profit - alternative_profit
-
-    # Legacy simple comparison (initial investment only, for reference)
-    alternative_simple_value = params.total_initial_investment * (
-        (1 + params.alternative_return_rate) ** params.holding_period_years
+    # Use the comparison module for fair S&P comparison
+    yearly_cash_flows = [proj.net_cash_flow for proj in yearly_projections]
+    alt_comparison = generate_alternative_comparison(
+        initial_investment=params.total_initial_investment,
+        yearly_cash_flows=yearly_cash_flows,
+        real_estate_profit=total_profit,
+        alternative_return_rate=params.alternative_return_rate,
+        holding_period_years=params.holding_period_years,
     )
-    alternative_simple_profit = alternative_simple_value - params.total_initial_investment
+
+    alternative_final_value = alt_comparison.alternative_final_value
+    alternative_profit = alt_comparison.alternative_profit
+    outperformance = alt_comparison.outperformance
+    alternative_simple_value = alt_comparison.alternative_simple_value
+    alternative_simple_profit = alt_comparison.alternative_simple_profit
+    total_capital_deployed = alt_comparison.total_capital_deployed
+    cumulative_negative_cash_flows = alt_comparison.cumulative_negative_cash_flows
 
     # Get investment grade based on full hold period performance vs stocks
     grade, rationale = calculate_investment_grade(
@@ -613,39 +517,15 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
     )
 
 
-@dataclass
-class SaleTaxEstimate:
-    """Estimate of capital gains tax on property sale."""
-    sale_price: float
-    original_purchase_price: float
-    capital_improvements: float
-    cost_basis: float  # purchase price + improvements
-    accumulated_depreciation: float
-    adjusted_basis: float  # cost_basis - depreciation
-
-    # Gains breakdown
-    total_gain: float  # sale_price - adjusted_basis
-    depreciation_recapture: float  # min(accumulated_depreciation, total_gain)
-    capital_gain: float  # total_gain - depreciation_recapture
-
-    # Tax breakdown
-    depreciation_recapture_tax: float  # 25% rate on recaptured depreciation
-    capital_gains_tax: float  # user's rate on remaining gain
-    total_tax: float
-
-    # After-tax result
-    selling_costs: float
-    loan_payoff: float
-    pre_tax_proceeds: float  # sale_price - selling_costs - loan_payoff
-    after_tax_proceeds: float  # pre_tax_proceeds - total_tax
-
+# SaleTaxEstimate is imported from tax.py for backward compatibility
+# New code should import directly from rei_simulator.tax
 
 def calculate_sale_tax(
     sale_price: float,
     original_purchase_price: float,
     capital_improvements: float,
     years_owned: int,
-    building_value: float,  # for depreciation calculation (typically 80% of original value)
+    building_value: float,
     was_rental: bool,
     cap_gains_rate: float,
     selling_costs: float,
@@ -655,77 +535,20 @@ def calculate_sale_tax(
     """
     Calculate capital gains tax estimate for a property sale.
 
-    This handles:
-    - Cost basis calculation (purchase price + improvements)
-    - Depreciation recapture at 25% (for rental properties)
-    - Long-term capital gains on remaining appreciation
-
-    Args:
-        sale_price: Expected sale price
-        original_purchase_price: What you originally paid for the property
-        capital_improvements: Major improvements that add to basis (not repairs)
-        years_owned: Years you've owned the property (for depreciation)
-        building_value: Building value for depreciation (typically 80% of purchase price)
-        was_rental: If True, calculate depreciation recapture
-        cap_gains_rate: Your long-term capital gains rate (0.0, 0.15, or 0.20)
-        selling_costs: Agent commission + closing costs
-        loan_balance: Remaining mortgage balance to pay off
-        depreciation_recapture_rate: Rate for depreciation recapture (default 25%)
-
-    Returns:
-        SaleTaxEstimate with full breakdown
+    Note: This is a wrapper for backward compatibility.
+    New code should import calculate_sale_tax from rei_simulator.tax directly.
     """
-    # Step 1: Calculate cost basis
-    cost_basis = original_purchase_price + capital_improvements
-
-    # Step 2: Calculate accumulated depreciation (only if rental property)
-    if was_rental and years_owned > 0 and building_value > 0:
-        # Straight-line depreciation over 27.5 years
-        annual_depreciation = building_value / 27.5
-        accumulated_depreciation = min(
-            annual_depreciation * years_owned,
-            building_value  # Can't depreciate more than building value
-        )
-    else:
-        accumulated_depreciation = 0.0
-
-    # Step 3: Calculate adjusted basis
-    adjusted_basis = cost_basis - accumulated_depreciation
-
-    # Step 4: Calculate total gain
-    total_gain = max(0, sale_price - adjusted_basis)
-
-    # Step 5: Split gain into depreciation recapture and capital gain
-    # Depreciation recapture is taxed at 25%, up to the amount of depreciation taken
-    depreciation_recapture = min(accumulated_depreciation, total_gain)
-    capital_gain = max(0, total_gain - depreciation_recapture)
-
-    # Step 6: Calculate taxes
-    depreciation_recapture_tax = depreciation_recapture * depreciation_recapture_rate
-    capital_gains_tax = capital_gain * cap_gains_rate
-    total_tax = depreciation_recapture_tax + capital_gains_tax
-
-    # Step 7: Calculate after-tax proceeds
-    pre_tax_proceeds = sale_price - selling_costs - loan_balance
-    after_tax_proceeds = pre_tax_proceeds - total_tax
-
-    return SaleTaxEstimate(
+    return _calculate_sale_tax(
         sale_price=sale_price,
         original_purchase_price=original_purchase_price,
         capital_improvements=capital_improvements,
-        cost_basis=cost_basis,
-        accumulated_depreciation=accumulated_depreciation,
-        adjusted_basis=adjusted_basis,
-        total_gain=total_gain,
-        depreciation_recapture=depreciation_recapture,
-        capital_gain=capital_gain,
-        depreciation_recapture_tax=depreciation_recapture_tax,
-        capital_gains_tax=capital_gains_tax,
-        total_tax=total_tax,
+        years_owned=years_owned,
+        building_value=building_value,
+        was_rental=was_rental,
+        capital_gains_rate=cap_gains_rate,
         selling_costs=selling_costs,
-        loan_payoff=loan_balance,
-        pre_tax_proceeds=pre_tax_proceeds,
-        after_tax_proceeds=after_tax_proceeds,
+        loan_balance=loan_balance,
+        depreciation_recapture_rate=depreciation_recapture_rate,
     )
 
 
@@ -796,8 +619,8 @@ def generate_sell_now_vs_hold_analysis(
     after_tax_proceeds_if_sell_now = net_proceeds_if_sell_now
 
     if original_purchase_price > 0:
-        # Calculate building value for depreciation (80% of original purchase)
-        building_value = original_purchase_price * 0.80
+        # Calculate building value for depreciation
+        building_value = original_purchase_price * BUILDING_VALUE_RATIO
 
         # Calculate loan balance (current equity = property value - loan balance)
         loan_balance = current_property_value - current_equity
@@ -875,7 +698,7 @@ def generate_sell_now_vs_hold_analysis(
         # Need to recalculate taxes based on appreciated value and additional years owned
         if original_purchase_price > 0:
             total_years_owned = years_owned + year
-            future_building_value = original_purchase_price * 0.80
+            future_building_value = original_purchase_price * BUILDING_VALUE_RATIO
 
             future_tax = calculate_sale_tax(
                 sale_price=hold_proj.sale_price,

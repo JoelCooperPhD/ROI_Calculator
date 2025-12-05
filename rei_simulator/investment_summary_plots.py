@@ -368,22 +368,57 @@ def plot_return_breakdown_pie(summary: InvestmentSummary) -> Figure:
 def plot_holding_period_analysis(params: InvestmentParameters) -> Figure:
     """
     Show how returns change with different holding periods.
+
+    Optimized to generate projections once for max years and extract subsets,
+    rather than regenerating the full simulation 30 times.
     """
+    import numpy as np
+
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     fig.patch.set_facecolor("#1a1a2e")
 
     years_range = list(range(1, 31))
+
+    # Generate a single summary for the maximum holding period (30 years)
+    # This contains all the yearly projections we need
+    params_copy = InvestmentParameters(**vars(params))
+    params_copy.holding_period_years = 30
+    full_summary = generate_investment_summary(params_copy)
+
+    # Extract profits, IRRs, and equity multiples for each holding period
     profits = []
     irrs = []
     equity_multiples = []
 
     for year in years_range:
-        params_copy = InvestmentParameters(**vars(params))
-        params_copy.holding_period_years = year
-        summary = generate_investment_summary(params_copy)
-        profits.append(summary.total_profit)
-        irrs.append(summary.irr * 100)
-        equity_multiples.append(summary.equity_multiple)
+        # Get projection at this year (it already has total_profit calculated)
+        proj = full_summary.yearly_projections[year - 1]
+
+        # Profit if sold at end of this year
+        total_profit = proj.total_profit
+        profits.append(total_profit)
+
+        # Calculate IRR for this holding period
+        # Cash flows: initial investment negative, yearly cash flows, final year includes sale
+        cash_flows = [-params.total_initial_investment]
+        for y in range(1, year + 1):
+            p = full_summary.yearly_projections[y - 1]
+            if y < year:
+                cash_flows.append(p.net_cash_flow)
+            else:
+                # Final year: cash flow + net sale proceeds
+                cash_flows.append(p.net_cash_flow + p.net_sale_proceeds)
+
+        from .investment_summary import calculate_irr
+        irr = calculate_irr(cash_flows) * 100
+        irrs.append(irr)
+
+        # Equity multiple for this holding period
+        if params.total_initial_investment > 0:
+            equity_multiple = (params.total_initial_investment + total_profit) / params.total_initial_investment
+        else:
+            equity_multiple = 0
+        equity_multiples.append(equity_multiple)
 
     # Left plot - Profit by holding period
     _setup_dark_style(fig, ax1)
@@ -438,6 +473,8 @@ def plot_holding_period_analysis(params: InvestmentParameters) -> Figure:
 def plot_sensitivity_tornado(summary: InvestmentSummary) -> Figure:
     """
     Tornado chart showing sensitivity to key assumptions.
+
+    Optimized to batch parameter variations where possible.
     """
     fig, ax = plt.subplots(figsize=(12, 8))
     _setup_dark_style(fig, ax)
@@ -445,37 +482,52 @@ def plot_sensitivity_tornado(summary: InvestmentSummary) -> Figure:
     params = summary.params
     base_profit = summary.total_profit
 
-    # Test different scenarios
+    # Test different scenarios - batch similar parameter variations
     scenarios = []
+
+    # Collect all parameter variations to run
+    param_variations = []
 
     # Appreciation variation
     for delta, label in [(-0.02, "-2%"), (0.02, "+2%")]:
         p = InvestmentParameters(**vars(params))
         p.appreciation_rate = params.appreciation_rate + delta
-        s = generate_investment_summary(p)
-        scenarios.append(("Appreciation " + label, s.total_profit - base_profit))
+        param_variations.append(("Appreciation " + label, p))
 
     # Rent variation
     if params.monthly_rent > 0:
         for mult, label in [(0.85, "-15%"), (1.15, "+15%")]:
             p = InvestmentParameters(**vars(params))
             p.monthly_rent = params.monthly_rent * mult
-            s = generate_investment_summary(p)
-            scenarios.append(("Rent " + label, s.total_profit - base_profit))
+            param_variations.append(("Rent " + label, p))
 
     # Vacancy variation
     for delta, label in [(0.05, "+5%"), (-0.03, "-3%")]:
         p = InvestmentParameters(**vars(params))
         p.vacancy_rate = max(0, params.vacancy_rate + delta)
-        s = generate_investment_summary(p)
-        scenarios.append(("Vacancy " + label, s.total_profit - base_profit))
+        param_variations.append(("Vacancy " + label, p))
 
-    # Holding period variation
+    # Holding period variation - optimize by using existing projections where possible
+    # For -3 years: if we have a summary that extends far enough, just look up that year
+    # For +5 years: need to generate new summary only if we don't have projections that far
+    current_period = params.holding_period_years
+
     for delta, label in [(-3, "-3 yrs"), (5, "+5 yrs")]:
-        p = InvestmentParameters(**vars(params))
-        p.holding_period_years = max(1, params.holding_period_years + delta)
+        target_year = max(1, current_period + delta)
+        if target_year <= len(summary.yearly_projections):
+            # We can reuse existing projections
+            proj = summary.yearly_projections[target_year - 1]
+            scenarios.append(("Hold Period " + label, proj.total_profit - base_profit))
+        else:
+            # Need to generate for longer period
+            p = InvestmentParameters(**vars(params))
+            p.holding_period_years = target_year
+            param_variations.append(("Hold Period " + label, p))
+
+    # Run all parameter variations
+    for label, p in param_variations:
         s = generate_investment_summary(p)
-        scenarios.append(("Hold Period " + label, s.total_profit - base_profit))
+        scenarios.append((label, s.total_profit - base_profit))
 
     # Sort by absolute impact
     scenarios.sort(key=lambda x: abs(x[1]), reverse=True)

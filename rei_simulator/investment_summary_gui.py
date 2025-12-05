@@ -78,7 +78,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
 
         # Left panel - inputs (scrollable)
-        self.input_frame = ctk.CTkScrollableFrame(self, width=380)
+        self.input_frame = ctk.CTkScrollableFrame(self, width=350)
         self.input_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
         # Right panel - plots
@@ -129,27 +129,20 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         management_rate: float,
         maintenance_annual: float,
         utilities_annual: float,
-        marginal_tax_rate: float = 0.0,
-        depreciation_enabled: bool = False,
-        qbi_deduction_enabled: bool = False,
     ):
-        """Set asset building parameters from the Asset Building tab.
+        """Set asset building parameters from the Income & Growth tab.
 
-        Operating costs (maintenance, utilities) originate from Recurring Costs tab.
-        Tax benefits (marginal_tax_rate, depreciation_enabled, qbi_deduction_enabled) from Asset Building tab.
+        Operating costs (maintenance, utilities) originate from Costs tab.
+        Tax treatment fields are now local to this tab.
         """
         self._appreciation_rate = appreciation_rate
         self._monthly_rent = monthly_rent
         self._rent_growth_rate = rent_growth_rate
         self._vacancy_rate = vacancy_rate
         self._management_rate = management_rate
-        # Operating costs from Recurring Costs tab (single source of truth)
+        # Operating costs from Costs tab (single source of truth)
         self._maintenance_annual = maintenance_annual
         self._utilities_annual = utilities_annual
-        # Tax benefits from Asset Building tab
-        self._marginal_tax_rate = marginal_tax_rate
-        self._depreciation_enabled = depreciation_enabled
-        self._qbi_deduction_enabled = qbi_deduction_enabled
 
     def set_analysis_mode(self, is_existing_property: bool):
         """Set the analysis mode and update available plots accordingly."""
@@ -263,6 +256,61 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             tooltip_title="Agent Commission + Closing Costs",
         )
         self.selling_cost_entry.pack(fill="x", pady=5)
+
+        # Tax Treatment Section (moved from Income & Growth tab)
+        self._create_section_header("Tax Treatment")
+
+        self.tax_rate_entry = LabeledEntry(
+            self.input_frame,
+            "Marginal Tax Rate (%):",
+            "0",
+            tooltip=(
+                "Your marginal (highest) income tax rate.\n\n"
+                "Only matters if claiming tax benefits:\n"
+                "• 0% = ignoring tax benefits in analysis\n"
+                "• 22-35% = typical for investors\n\n"
+                "This rate is used to calculate the value of:\n"
+                "• Depreciation deductions\n"
+                "• Mortgage interest deductions\n"
+                "• QBI deduction (if enabled)"
+            ),
+            tooltip_title="Marginal Tax Rate",
+        )
+        self.tax_rate_entry.pack(fill="x", pady=5)
+
+        # Depreciation checkbox
+        self.depreciation_var = ctk.BooleanVar(value=False)
+        self.depreciation_check = ctk.CTkCheckBox(
+            self.input_frame,
+            text="Include depreciation (27.5-year schedule)",
+            variable=self.depreciation_var,
+        )
+        self.depreciation_check.pack(anchor="w", pady=(5, 0))
+
+        self.depreciation_info = ctk.CTkLabel(
+            self.input_frame,
+            text="Reduces taxable income from rental profits",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        self.depreciation_info.pack(anchor="w", padx=(25, 0), pady=(0, 5))
+
+        # QBI checkbox
+        self.qbi_var = ctk.BooleanVar(value=False)
+        self.qbi_check = ctk.CTkCheckBox(
+            self.input_frame,
+            text="Include QBI deduction (20%)",
+            variable=self.qbi_var,
+        )
+        self.qbi_check.pack(anchor="w", pady=(5, 0))
+
+        self.qbi_info = ctk.CTkLabel(
+            self.input_frame,
+            text="Qualified Business Income deduction for rentals",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        self.qbi_info.pack(anchor="w", padx=(25, 0), pady=(0, 10))
 
         # Capital Gains Tax Section (only for existing property mode)
         self.tax_section_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
@@ -680,10 +728,10 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             renovation_cost=self._renovation_cost,
             renovation_duration_months=self._renovation_duration_months,
             rent_during_renovation_pct=self._rent_during_renovation_pct,
-            # Tax benefits from Asset Building tab
-            marginal_tax_rate=self._marginal_tax_rate,
-            depreciation_enabled=self._depreciation_enabled,
-            qbi_deduction_enabled=self._qbi_deduction_enabled,
+            # Tax treatment (local to this tab)
+            marginal_tax_rate=safe_percent(self.tax_rate_entry.get(), 0.0),
+            depreciation_enabled=self.depreciation_var.get(),
+            qbi_deduction_enabled=self.qbi_var.get(),
         )
 
     def calculate(self):
@@ -804,6 +852,10 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.selling_cost_entry.set(cfg.get("selling_cost", "6.0"))
         self.alternative_return_entry.set(cfg.get("sp500_return", "10.0"))
         self.initial_reserves_entry.set(cfg.get("initial_reserves", "10000"))
+        # Tax treatment fields (moved from Income & Growth tab)
+        self.tax_rate_entry.set(cfg.get("tax_rate", "0"))
+        self.depreciation_var.set(cfg.get("depreciation_enabled", False))
+        self.qbi_var.set(cfg.get("qbi_deduction_enabled", False))
         # Capital gains tax fields
         self.original_purchase_entry.set(cfg.get("original_purchase_price", "0"))
         self.capital_improvements_entry.set(cfg.get("capital_improvements", "0"))
@@ -818,6 +870,10 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             "selling_cost": self.selling_cost_entry.get(),
             "sp500_return": self.alternative_return_entry.get(),
             "initial_reserves": self.initial_reserves_entry.get(),
+            # Tax treatment fields
+            "tax_rate": self.tax_rate_entry.get(),
+            "depreciation_enabled": self.depreciation_var.get(),
+            "qbi_deduction_enabled": self.qbi_var.get(),
             # Capital gains tax fields
             "original_purchase_price": self.original_purchase_entry.get(),
             "capital_improvements": self.capital_improvements_entry.get(),
@@ -829,3 +885,10 @@ class InvestmentSummaryTab(ctk.CTkFrame):
     def get_holding_years(self) -> int:
         """Get the current holding period in years."""
         return self.holding_period_var.get()
+
+    def get_tax_treatment(self) -> dict:
+        """Get tax treatment values for sharing with Income & Growth tab."""
+        return {
+            "marginal_tax_rate": safe_percent(self.tax_rate_entry.get(), 0.0),
+            "depreciation_enabled": self.depreciation_var.get(),
+        }

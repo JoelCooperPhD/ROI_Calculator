@@ -8,9 +8,14 @@ Tracks the building of wealth through:
 
 from dataclasses import dataclass, field
 from enum import Enum
+import numpy as np
 import pandas as pd
 
-from .amortization import calculate_periodic_payment
+from .constants import (
+    DEPRECIATION_YEARS_RESIDENTIAL,
+    BUILDING_VALUE_RATIO,
+)
+from .formulas import calculate_periodic_payment
 
 
 class AppreciationType(Enum):
@@ -160,14 +165,14 @@ class AssetBuildingParameters:
     @property
     def building_value_for_depreciation(self) -> float:
         """Building value for depreciation (typically 80% of property value)."""
-        return self.property_value * 0.80  # Land typically 20%
+        return self.property_value * BUILDING_VALUE_RATIO
 
     @property
     def annual_depreciation(self) -> float:
         """Annual depreciation amount for tax purposes."""
         if not self.depreciation_enabled:
             return 0.0
-        return self.building_value_for_depreciation / 27.5
+        return self.building_value_for_depreciation / DEPRECIATION_YEARS_RESIDENTIAL
 
 
 @dataclass
@@ -266,51 +271,99 @@ def generate_amortization_for_asset(
     term_years: int,
     analysis_years: int
 ) -> pd.DataFrame:
-    """Generate simplified amortization schedule for asset building analysis."""
+    """Generate simplified amortization schedule for asset building analysis.
+
+    Uses vectorized numpy operations for efficiency.
+    """
+    if loan_amount <= 0 or annual_rate <= 0:
+        # Return empty schedule with zeros
+        years = np.arange(1, analysis_years + 1)
+        return pd.DataFrame({
+            "year": years,
+            "principal_paid": np.zeros(analysis_years),
+            "interest_paid": np.zeros(analysis_years),
+            "cumulative_principal": np.zeros(analysis_years),
+            "cumulative_interest": np.zeros(analysis_years),
+            "ending_balance": np.zeros(analysis_years),
+            "annual_payment": np.zeros(analysis_years),
+        })
+
     monthly_rate = annual_rate / 12
     total_payments = term_years * 12
 
     # Use shared payment calculation
     payment = calculate_periodic_payment(loan_amount, monthly_rate, total_payments)
+    annual_payment_amount = payment * 12
 
-    records = []
-    balance = loan_amount
-    cumulative_principal = 0
-    cumulative_interest = 0
+    # Calculate all monthly balances at once using the amortization formula:
+    # B(n) = P * ((1+r)^N - (1+r)^n) / ((1+r)^N - 1)
+    total_months = min(analysis_years * 12, total_payments)
+    months = np.arange(1, total_months + 1)
 
-    for year in range(1, analysis_years + 1):
-        year_principal = 0
-        year_interest = 0
+    rate_factor = (1 + monthly_rate) ** total_payments
+    monthly_rate_factors = (1 + monthly_rate) ** months
 
-        for month in range(12):
-            if balance <= 0:
-                break
+    # Remaining balance after each month
+    monthly_balances = loan_amount * (rate_factor - monthly_rate_factors) / (rate_factor - 1)
+    monthly_balances = np.maximum(monthly_balances, 0)
 
-            interest = balance * monthly_rate
-            principal = min(payment - interest, balance)
-            balance = max(0, balance - principal)
+    # Pad with zeros if analysis_years exceeds loan term
+    if analysis_years * 12 > total_payments:
+        padding = np.zeros(analysis_years * 12 - total_payments)
+        monthly_balances = np.concatenate([monthly_balances, padding])
 
-            year_principal += principal
-            year_interest += interest
+    # Get year-end balances (every 12th value)
+    ending_balances = monthly_balances[11::12]
 
-        cumulative_principal += year_principal
-        cumulative_interest += year_interest
+    # Ensure we have exactly analysis_years entries
+    if len(ending_balances) < analysis_years:
+        ending_balances = np.concatenate([ending_balances, np.zeros(analysis_years - len(ending_balances))])
 
-        # Annual payment is 0 if loan is paid off (balance was 0 at start of year)
-        # We track this by checking if any principal was paid this year
-        annual_payment = payment * 12 if year_principal > 0 or year_interest > 0 else 0
+    # Calculate year-over-year principal paydown
+    beginning_balances = np.concatenate([[loan_amount], ending_balances[:-1]])
+    principal_paid = np.maximum(beginning_balances - ending_balances, 0)
 
-        records.append({
-            "year": year,
-            "principal_paid": year_principal,
-            "interest_paid": year_interest,
-            "cumulative_principal": cumulative_principal,
-            "cumulative_interest": cumulative_interest,
-            "ending_balance": balance,
-            "annual_payment": annual_payment,
-        })
+    # Calculate cumulative principal
+    cumulative_principal = np.cumsum(principal_paid)
 
-    return pd.DataFrame(records)
+    # Calculate interest paid each year using beginning balances for each month
+    interest_by_year = np.zeros(analysis_years)
+    for year_idx in range(analysis_years):
+        start_month = year_idx * 12
+        end_month = min(start_month + 12, len(monthly_balances))
+
+        if start_month >= len(monthly_balances):
+            continue
+
+        # Beginning balances for each month in this year
+        if start_month == 0:
+            year_beginning_balances = np.concatenate([[loan_amount], monthly_balances[start_month:end_month-1]])
+        else:
+            year_beginning_balances = monthly_balances[start_month-1:end_month-1]
+
+        year_beginning_balances = np.maximum(year_beginning_balances, 0)
+        interest_by_year[year_idx] = np.sum(year_beginning_balances * monthly_rate)
+
+    cumulative_interest = np.cumsum(interest_by_year)
+
+    # Annual payment is 0 if loan is paid off
+    annual_payments = np.where(
+        (principal_paid > 0) | (interest_by_year > 0),
+        annual_payment_amount,
+        0.0
+    )
+
+    years = np.arange(1, analysis_years + 1)
+
+    return pd.DataFrame({
+        "year": years,
+        "principal_paid": principal_paid,
+        "interest_paid": interest_by_year,
+        "cumulative_principal": cumulative_principal,
+        "cumulative_interest": cumulative_interest,
+        "ending_balance": ending_balances,
+        "annual_payment": annual_payments,
+    })
 
 
 def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBuildingSchedule:
@@ -519,19 +572,29 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
     # Calculate total return (equity + cumulative cash flow)
     df["total_return"] = df["total_equity"] + df["cumulative_cash_flow"] - params.initial_equity
 
-    # Calculate annualized return (CAGR)
-    def calc_cagr(row):
-        # Year 0 has no return yet (starting point)
-        if row["year"] == 0 or params.initial_equity <= 0:
-            return 0
-        total_value = params.initial_equity + row["total_return"]
-        if total_value > 0:
-            # CAGR formula: (ending/beginning)^(1/years) - 1
-            return (((total_value / params.initial_equity) ** (1 / row["year"])) - 1) * 100
-        else:
-            # Fallback for extreme losses
-            return ((row["total_return"] / params.initial_equity) / row["year"]) * 100
+    # Calculate annualized return (CAGR) - vectorized for efficiency
+    years = df["year"].values
+    total_return = df["total_return"].values
 
-    df["annualized_return"] = df.apply(calc_cagr, axis=1)
+    if params.initial_equity > 0:
+        total_value = params.initial_equity + total_return
+        # Avoid division by zero for year 0
+        years_safe = np.where(years == 0, 1, years)
+
+        # CAGR formula: (ending/beginning)^(1/years) - 1
+        # Use np.where to handle positive vs negative total_value
+        cagr = np.where(
+            years == 0,
+            0.0,
+            np.where(
+                total_value > 0,
+                (np.power(total_value / params.initial_equity, 1.0 / years_safe) - 1) * 100,
+                (total_return / params.initial_equity / years_safe) * 100  # Fallback for extreme losses
+            )
+        )
+    else:
+        cagr = np.zeros(len(df))
+
+    df["annualized_return"] = cagr
 
     return AssetBuildingSchedule(schedule=df, params=params)
