@@ -272,6 +272,23 @@ class AssetBuildingTab(ctk.CTkFrame):
         )
         self.depreciation_check.pack(anchor="w", pady=5)
 
+        # QBI Deduction checkbox
+        self.qbi_var = ctk.BooleanVar(value=False)
+        self.qbi_check = ctk.CTkCheckBox(
+            self.input_frame,
+            text="QBI Deduction (Section 199A)",
+            variable=self.qbi_var
+        )
+        self.qbi_check.pack(anchor="w", pady=5)
+
+        self.qbi_info = ctk.CTkLabel(
+            self.input_frame,
+            text="Deduct 20% of net rental income",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        self.qbi_info.pack(anchor="w", padx=(25, 0))
+
 
     def _create_section_header(self, text: str):
         """Create a section header label."""
@@ -413,6 +430,7 @@ class AssetBuildingTab(ctk.CTkFrame):
             # Tax benefits
             "marginal_tax_rate": safe_percent(self.tax_rate_entry.get(), 0.0),
             "depreciation_enabled": self.depreciation_var.get(),
+            "qbi_deduction_enabled": self.qbi_var.get(),
         }
 
     def load_config(self, cfg: dict) -> None:
@@ -425,6 +443,7 @@ class AssetBuildingTab(ctk.CTkFrame):
         self.management_rate_entry.set(cfg.get("management_rate", "0"))
         self.tax_rate_entry.set(cfg.get("tax_rate", "0"))
         self.depreciation_var.set(cfg.get("depreciation_enabled", False))
+        self.qbi_var.set(cfg.get("qbi_deduction_enabled", False))
         self._update_rent_per_sqft()
 
     def save_config(self) -> dict:
@@ -438,6 +457,7 @@ class AssetBuildingTab(ctk.CTkFrame):
             "management_rate": self.management_rate_entry.get(),
             "tax_rate": self.tax_rate_entry.get(),
             "depreciation_enabled": self.depreciation_var.get(),
+            "qbi_deduction_enabled": self.qbi_var.get(),
         }
 
     def _update_plot(self, *args):

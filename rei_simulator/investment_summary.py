@@ -67,6 +67,7 @@ class InvestmentParameters:
     # Tax benefits
     marginal_tax_rate: float = 0.0  # For mortgage interest deduction
     depreciation_enabled: bool = False  # 27.5 year depreciation for rentals
+    qbi_deduction_enabled: bool = False  # Section 199A 20% QBI deduction
 
     @property
     def total_initial_investment(self) -> float:
@@ -139,6 +140,9 @@ class YearlyProjection:
     # Tax benefits
     interest_deduction: float
     depreciation_benefit: float
+    taxable_rental_income: float  # QBI basis (Schedule E net income)
+    qbi_deduction: float  # 20% of positive taxable_rental_income
+    qbi_tax_benefit: float  # Tax savings from QBI deduction
     total_tax_benefit: float
 
     # Cash flow
@@ -428,7 +432,26 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         # Calculate tax benefits
         interest_deduction = interest_paid * params.marginal_tax_rate
         depreciation_benefit = params.annual_depreciation * params.marginal_tax_rate
-        total_tax_benefit = interest_deduction + depreciation_benefit
+
+        # Calculate QBI (Section 199A) - taxable rental income for the year
+        # This is Schedule E net income: rent minus all deductible expenses
+        taxable_rental_income = (
+            net_rental_income      # Gross - vacancy - management
+            - operating_costs      # Property tax, insurance, HOA, maintenance, utilities
+            - interest_paid        # Mortgage interest (not principal)
+        )
+        if params.depreciation_enabled:
+            taxable_rental_income -= params.annual_depreciation
+
+        # QBI deduction is 20% of positive taxable rental income
+        if params.qbi_deduction_enabled and taxable_rental_income > 0:
+            qbi_deduction = taxable_rental_income * 0.20
+            qbi_tax_benefit = qbi_deduction * params.marginal_tax_rate
+        else:
+            qbi_deduction = 0.0
+            qbi_tax_benefit = 0.0
+
+        total_tax_benefit = interest_deduction + depreciation_benefit + qbi_tax_benefit
 
         # Pre-tax cash flow
         pre_tax_cash_flow = net_rental_income - total_expenses
@@ -461,6 +484,9 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
             total_expenses=total_expenses,
             interest_deduction=interest_deduction,
             depreciation_benefit=depreciation_benefit,
+            taxable_rental_income=taxable_rental_income,
+            qbi_deduction=qbi_deduction,
+            qbi_tax_benefit=qbi_tax_benefit,
             total_tax_benefit=total_tax_benefit,
             pre_tax_cash_flow=pre_tax_cash_flow,
             net_cash_flow=net_cash_flow,
@@ -588,21 +614,143 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
 
 
 @dataclass
+class SaleTaxEstimate:
+    """Estimate of capital gains tax on property sale."""
+    sale_price: float
+    original_purchase_price: float
+    capital_improvements: float
+    cost_basis: float  # purchase price + improvements
+    accumulated_depreciation: float
+    adjusted_basis: float  # cost_basis - depreciation
+
+    # Gains breakdown
+    total_gain: float  # sale_price - adjusted_basis
+    depreciation_recapture: float  # min(accumulated_depreciation, total_gain)
+    capital_gain: float  # total_gain - depreciation_recapture
+
+    # Tax breakdown
+    depreciation_recapture_tax: float  # 25% rate on recaptured depreciation
+    capital_gains_tax: float  # user's rate on remaining gain
+    total_tax: float
+
+    # After-tax result
+    selling_costs: float
+    loan_payoff: float
+    pre_tax_proceeds: float  # sale_price - selling_costs - loan_payoff
+    after_tax_proceeds: float  # pre_tax_proceeds - total_tax
+
+
+def calculate_sale_tax(
+    sale_price: float,
+    original_purchase_price: float,
+    capital_improvements: float,
+    years_owned: int,
+    building_value: float,  # for depreciation calculation (typically 80% of original value)
+    was_rental: bool,
+    cap_gains_rate: float,
+    selling_costs: float,
+    loan_balance: float,
+    depreciation_recapture_rate: float = 0.25,
+) -> SaleTaxEstimate:
+    """
+    Calculate capital gains tax estimate for a property sale.
+
+    This handles:
+    - Cost basis calculation (purchase price + improvements)
+    - Depreciation recapture at 25% (for rental properties)
+    - Long-term capital gains on remaining appreciation
+
+    Args:
+        sale_price: Expected sale price
+        original_purchase_price: What you originally paid for the property
+        capital_improvements: Major improvements that add to basis (not repairs)
+        years_owned: Years you've owned the property (for depreciation)
+        building_value: Building value for depreciation (typically 80% of purchase price)
+        was_rental: If True, calculate depreciation recapture
+        cap_gains_rate: Your long-term capital gains rate (0.0, 0.15, or 0.20)
+        selling_costs: Agent commission + closing costs
+        loan_balance: Remaining mortgage balance to pay off
+        depreciation_recapture_rate: Rate for depreciation recapture (default 25%)
+
+    Returns:
+        SaleTaxEstimate with full breakdown
+    """
+    # Step 1: Calculate cost basis
+    cost_basis = original_purchase_price + capital_improvements
+
+    # Step 2: Calculate accumulated depreciation (only if rental property)
+    if was_rental and years_owned > 0 and building_value > 0:
+        # Straight-line depreciation over 27.5 years
+        annual_depreciation = building_value / 27.5
+        accumulated_depreciation = min(
+            annual_depreciation * years_owned,
+            building_value  # Can't depreciate more than building value
+        )
+    else:
+        accumulated_depreciation = 0.0
+
+    # Step 3: Calculate adjusted basis
+    adjusted_basis = cost_basis - accumulated_depreciation
+
+    # Step 4: Calculate total gain
+    total_gain = max(0, sale_price - adjusted_basis)
+
+    # Step 5: Split gain into depreciation recapture and capital gain
+    # Depreciation recapture is taxed at 25%, up to the amount of depreciation taken
+    depreciation_recapture = min(accumulated_depreciation, total_gain)
+    capital_gain = max(0, total_gain - depreciation_recapture)
+
+    # Step 6: Calculate taxes
+    depreciation_recapture_tax = depreciation_recapture * depreciation_recapture_rate
+    capital_gains_tax = capital_gain * cap_gains_rate
+    total_tax = depreciation_recapture_tax + capital_gains_tax
+
+    # Step 7: Calculate after-tax proceeds
+    pre_tax_proceeds = sale_price - selling_costs - loan_balance
+    after_tax_proceeds = pre_tax_proceeds - total_tax
+
+    return SaleTaxEstimate(
+        sale_price=sale_price,
+        original_purchase_price=original_purchase_price,
+        capital_improvements=capital_improvements,
+        cost_basis=cost_basis,
+        accumulated_depreciation=accumulated_depreciation,
+        adjusted_basis=adjusted_basis,
+        total_gain=total_gain,
+        depreciation_recapture=depreciation_recapture,
+        capital_gain=capital_gain,
+        depreciation_recapture_tax=depreciation_recapture_tax,
+        capital_gains_tax=capital_gains_tax,
+        total_tax=total_tax,
+        selling_costs=selling_costs,
+        loan_payoff=loan_balance,
+        pre_tax_proceeds=pre_tax_proceeds,
+        after_tax_proceeds=after_tax_proceeds,
+    )
+
+
+@dataclass
 class SellNowVsHoldAnalysis:
     """Analysis comparing selling now vs holding longer."""
     # Current equity position
     current_equity: float
     selling_costs_now: float
-    net_proceeds_if_sell_now: float
+    net_proceeds_if_sell_now: float  # Pre-tax proceeds
+
+    # Tax estimates (None if tax calculation not enabled)
+    sell_now_tax: Optional[SaleTaxEstimate] = None
+
+    # After-tax proceeds (equals net_proceeds_if_sell_now if no tax calc)
+    after_tax_proceeds_if_sell_now: float = 0.0
 
     # Year-by-year comparison
-    comparison_df: pd.DataFrame
+    comparison_df: pd.DataFrame = None  # type: ignore
 
     # At chosen holding period
-    hold_outcome: float  # Total value if hold (sale proceeds + cumulative cash flow)
-    sell_now_outcome: float  # Value if sell now and invest proceeds in stocks
-    recommendation: str
-    advantage_amount: float  # Positive = hold is better, negative = sell is better
+    hold_outcome: float = 0.0  # Total value if hold (sale proceeds + cumulative cash flow)
+    sell_now_outcome: float = 0.0  # Value if sell now and invest proceeds in stocks
+    recommendation: str = ""
+    advantage_amount: float = 0.0  # Positive = hold is better, negative = sell is better
 
 
 def generate_sell_now_vs_hold_analysis(
@@ -610,6 +758,12 @@ def generate_sell_now_vs_hold_analysis(
     current_equity: float,
     current_property_value: float,
     analysis_years: int = 10,
+    # Tax parameters for capital gains calculation
+    original_purchase_price: float = 0.0,
+    capital_improvements: float = 0.0,
+    years_owned: int = 0,
+    was_rental: bool = False,
+    cap_gains_rate: float = 0.15,
 ) -> SellNowVsHoldAnalysis:
     """
     Generate comparison: Sell now and invest in stocks vs. continue holding.
@@ -617,7 +771,7 @@ def generate_sell_now_vs_hold_analysis(
     This is specifically for existing property owners asking "should I sell?"
 
     Comparison methodology:
-    - Sell Now: Take net proceeds (equity minus selling costs), invest in S&P,
+    - Sell Now: Take net proceeds (equity minus selling costs minus taxes), invest in S&P,
       let it compound with no withdrawals
     - Hold: Continue holding the property, accumulating cash flows, then sell
       at the end. Total value = sale proceeds + cumulative cash flow
@@ -627,10 +781,39 @@ def generate_sell_now_vs_hold_analysis(
         current_equity: Current equity (property value - loan balance)
         current_property_value: Current market value of property
         analysis_years: How many years to project forward
+        original_purchase_price: What you originally paid (for tax calculation)
+        capital_improvements: Major improvements added to basis
+        years_owned: Years owned (for depreciation calculation)
+        was_rental: If True, calculate depreciation recapture
+        cap_gains_rate: Long-term capital gains rate (0.0, 0.15, or 0.20)
     """
     # Calculate what you'd get if you sold today
     selling_costs_now = current_property_value * params.selling_cost_percent
     net_proceeds_if_sell_now = current_equity - selling_costs_now
+
+    # Calculate capital gains tax if we have tax parameters
+    sell_now_tax: Optional[SaleTaxEstimate] = None
+    after_tax_proceeds_if_sell_now = net_proceeds_if_sell_now
+
+    if original_purchase_price > 0:
+        # Calculate building value for depreciation (80% of original purchase)
+        building_value = original_purchase_price * 0.80
+
+        # Calculate loan balance (current equity = property value - loan balance)
+        loan_balance = current_property_value - current_equity
+
+        sell_now_tax = calculate_sale_tax(
+            sale_price=current_property_value,
+            original_purchase_price=original_purchase_price,
+            capital_improvements=capital_improvements,
+            years_owned=years_owned,
+            building_value=building_value,
+            was_rental=was_rental,
+            cap_gains_rate=cap_gains_rate,
+            selling_costs=selling_costs_now,
+            loan_balance=loan_balance,
+        )
+        after_tax_proceeds_if_sell_now = sell_now_tax.after_tax_proceeds
 
     # Generate hold scenario projections for the full analysis period (more efficient)
     params_full = InvestmentParameters(**vars(params))
@@ -640,22 +823,26 @@ def generate_sell_now_vs_hold_analysis(
     comparison_data = []
 
     # Track S&P balance with matched cash flows
-    s_and_p_balance = net_proceeds_if_sell_now
+    # Use AFTER-TAX proceeds for the S&P comparison - this is what you'd actually invest
+    s_and_p_balance = after_tax_proceeds_if_sell_now
+    s_and_p_cost_basis = after_tax_proceeds_if_sell_now  # What we invested (for cap gains calc)
 
     # Year 0: Starting point (today)
-    # Sell Now: You have net proceeds in hand
-    # Hold: You have current equity (but selling costs would apply if you sold)
-    # For fair comparison at year 0: both start at net_proceeds_if_sell_now
-    # (Hold value at year 0 = what you'd get if you sold today = same as Sell)
+    # Sell Now: You have after-tax proceeds in hand (both pre-tax S&P and after-tax start here)
+    # Hold (pre-tax): Net proceeds before taxes (higher than after-tax)
+    # Hold (after-tax): Same as sell now - what you'd actually have after taxes
     comparison_data.append({
         "year": 0,
-        "sell_now_value": net_proceeds_if_sell_now,
-        "sell_sp_balance": net_proceeds_if_sell_now,
-        "hold_sale_proceeds": net_proceeds_if_sell_now,  # Same as sell - it's today
+        "sell_now_value": after_tax_proceeds_if_sell_now,  # S&P pre-tax starts at after-tax proceeds
+        "sell_sp_balance": after_tax_proceeds_if_sell_now,
+        "sell_after_tax": after_tax_proceeds_if_sell_now,  # No gains yet
+        "hold_sale_proceeds": net_proceeds_if_sell_now,  # Pre-tax sale proceeds
         "hold_cash_flow": 0,
         "hold_cumulative_cash_flow": 0,
-        "hold_total_outcome": net_proceeds_if_sell_now,
-        "difference": 0,
+        "hold_total_outcome": net_proceeds_if_sell_now,  # Pre-tax value (before capital gains tax)
+        "hold_after_tax": after_tax_proceeds_if_sell_now,  # After-tax starts same as sell
+        "difference": net_proceeds_if_sell_now - after_tax_proceeds_if_sell_now,
+        "difference_after_tax": 0,
         "better_option": "Equal",
     })
 
@@ -669,50 +856,85 @@ def generate_sell_now_vs_hold_analysis(
         # Simple compound growth - no withdrawals
         s_and_p_balance *= (1 + params.alternative_return_rate)
 
-        # Sell Now value is just the S&P balance
+        # Sell Now value is just the S&P balance (pre-tax)
         sell_total_value = s_and_p_balance
+
+        # Calculate after-tax value if we sold stocks now
+        # Long-term cap gains on the growth
+        stock_gain = max(0, s_and_p_balance - s_and_p_cost_basis)
+        stock_tax = stock_gain * cap_gains_rate
+        sell_after_tax = s_and_p_balance - stock_tax
 
         # =================================================================
         # SCENARIO B: HOLD THE PROPERTY
         # =================================================================
-        # TOTAL VALUE = sale proceeds + cumulative cash flow received
+        # TOTAL VALUE = sale proceeds + cumulative cash flow received (pre-tax)
         hold_total_value = hold_proj.net_sale_proceeds + hold_proj.cumulative_cash_flow
+
+        # Calculate after-tax value if we sold property at this year
+        # Need to recalculate taxes based on appreciated value and additional years owned
+        if original_purchase_price > 0:
+            total_years_owned = years_owned + year
+            future_building_value = original_purchase_price * 0.80
+
+            future_tax = calculate_sale_tax(
+                sale_price=hold_proj.sale_price,
+                original_purchase_price=original_purchase_price,
+                capital_improvements=capital_improvements,
+                years_owned=total_years_owned,
+                building_value=future_building_value,
+                was_rental=was_rental,
+                cap_gains_rate=cap_gains_rate,
+                selling_costs=hold_proj.selling_costs,
+                loan_balance=hold_proj.loan_balance,
+            )
+            hold_after_tax = future_tax.after_tax_proceeds + hold_proj.cumulative_cash_flow
+        else:
+            # No tax calculation - use pre-tax values
+            hold_after_tax = hold_total_value
 
         # Which is better? (Positive = Hold is better)
         difference = hold_total_value - sell_total_value
+        difference_after_tax = hold_after_tax - sell_after_tax
 
         comparison_data.append({
             "year": year,
             "sell_now_value": sell_total_value,
             "sell_sp_balance": s_and_p_balance,
+            "sell_after_tax": sell_after_tax,
             "hold_sale_proceeds": hold_proj.net_sale_proceeds,
             "hold_cash_flow": hold_proj.net_cash_flow,
             "hold_cumulative_cash_flow": hold_proj.cumulative_cash_flow,
             "hold_total_outcome": hold_total_value,
+            "hold_after_tax": hold_after_tax,
             "difference": difference,
-            "better_option": "Hold" if difference > 0 else "Sell Now",
+            "difference_after_tax": difference_after_tax,
+            "better_option": "Hold" if difference_after_tax > 0 else "Sell Now",
         })
 
     comparison_df = pd.DataFrame(comparison_data)
 
     # Get the outcome at the chosen holding period
     final_row = comparison_df[comparison_df["year"] == analysis_years].iloc[0]
-    hold_outcome = final_row["hold_total_outcome"]
-    sell_now_outcome = final_row["sell_now_value"]
-    advantage_amount = final_row["difference"]
+    # Use after-tax values for the final comparison
+    hold_outcome = final_row["hold_after_tax"]
+    sell_now_outcome = final_row["sell_after_tax"]
+    advantage_amount = final_row["difference_after_tax"]
 
-    # Recommendation
+    # Recommendation based on after-tax comparison
     if advantage_amount > 0:
-        recommendation = f"HOLD - Better by ${advantage_amount:,.0f} over {analysis_years} years"
+        recommendation = f"HOLD - Better by ${advantage_amount:,.0f} after taxes over {analysis_years} years"
     elif advantage_amount < 0:
-        recommendation = f"SELL NOW - Better by ${abs(advantage_amount):,.0f} over {analysis_years} years"
+        recommendation = f"SELL NOW - Better by ${abs(advantage_amount):,.0f} after taxes over {analysis_years} years"
     else:
-        recommendation = "NEUTRAL - Both options roughly equal"
+        recommendation = "NEUTRAL - Both options roughly equal after taxes"
 
     return SellNowVsHoldAnalysis(
         current_equity=current_equity,
         selling_costs_now=selling_costs_now,
         net_proceeds_if_sell_now=net_proceeds_if_sell_now,
+        sell_now_tax=sell_now_tax,
+        after_tax_proceeds_if_sell_now=after_tax_proceeds_if_sell_now,
         comparison_df=comparison_df,
         hold_outcome=hold_outcome,
         sell_now_outcome=sell_now_outcome,

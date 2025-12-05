@@ -935,6 +935,10 @@ class MainApplication(ctk.CTk):
         """Handle analysis mode change - propagate to amortization tab and clear all charts."""
         self.amortization_tab.set_analysis_mode(mode)
 
+        # Also update investment summary tab to show/hide tax inputs
+        is_existing = (mode == "Existing Property")
+        self.investment_summary_tab.set_analysis_mode(is_existing)
+
         # Clear all charts since mode change invalidates them
         self.amortization_tab.clear_chart()
         self.recurring_costs_tab.clear_chart()
@@ -958,6 +962,10 @@ class MainApplication(ctk.CTk):
         amort_cfg = saved.get("amortization", {})
         mode = amort_cfg.get("analysis_mode", "New Purchase")
         self.analysis_mode_var.set(mode)
+
+        # Update investment summary tab to show/hide tax inputs based on mode
+        is_existing = (mode == "Existing Property")
+        self.investment_summary_tab.set_analysis_mode(is_existing)
 
     def _save_all_config(self):
         """Save current field values from all tabs."""
@@ -1074,6 +1082,7 @@ class MainApplication(ctk.CTk):
                 # Tax benefits from Asset Building tab
                 marginal_tax_rate=asset_params["marginal_tax_rate"],
                 depreciation_enabled=asset_params["depreciation_enabled"],
+                qbi_deduction_enabled=asset_params["qbi_deduction_enabled"],
             )
 
             # Set analysis mode (existing property or new purchase)

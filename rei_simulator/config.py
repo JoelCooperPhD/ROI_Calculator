@@ -61,6 +61,12 @@ def get_default_config() -> dict[str, Any]:
             "selling_cost": "6.0",
             "sp500_return": "10.0",
             "initial_reserves": "10000",
+            # Capital gains tax fields (for existing property mode)
+            "original_purchase_price": "0",
+            "capital_improvements": "0",
+            "years_owned": "0",
+            "cap_gains_rate": "15",
+            "was_rental": False,
         },
     }
 

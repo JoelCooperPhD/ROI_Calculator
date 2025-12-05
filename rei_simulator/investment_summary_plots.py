@@ -365,123 +365,6 @@ def plot_return_breakdown_pie(summary: InvestmentSummary) -> Figure:
     return fig
 
 
-def plot_investment_dashboard(summary: InvestmentSummary) -> Figure:
-    """
-    Comprehensive 4-panel dashboard with key metrics and visualizations.
-    """
-    fig = plt.figure(figsize=(12, 9))
-    fig.patch.set_facecolor("#1a1a2e")
-
-    # Create grid with more spacing
-    gs = fig.add_gridspec(3, 2, height_ratios=[0.6, 1, 1], hspace=0.4, wspace=0.3)
-
-    # Top panel - Key metrics
-    ax_metrics = fig.add_subplot(gs[0, :])
-    ax_metrics.set_facecolor("#16213e")
-    ax_metrics.axis("off")
-
-    # Metrics display
-    metrics = [
-        ("Total Profit", f"${summary.total_profit:,.0f}", COLORS["profit"] if summary.total_profit >= 0 else COLORS["loss"]),
-        ("IRR", f"{summary.irr * 100:.1f}%", COLORS["secondary"]),
-        ("Capital Deployed", f"${summary.total_capital_deployed:,.0f}", COLORS["primary"]),
-        ("vs S&P 500", f"${summary.outperformance:+,.0f}", COLORS["profit"] if summary.outperformance >= 0 else COLORS["loss"]),
-        ("Grade", summary.grade.split(" - ")[0], COLORS["warning"]),
-    ]
-
-    # Position metrics evenly with smaller font sizes for better fit
-    num_metrics = len(metrics)
-    spacing = 0.8 / num_metrics  # Use 80% of width
-    start_x = 0.1 + spacing / 2
-
-    for i, (label, value, color) in enumerate(metrics):
-        x = start_x + i * spacing
-        ax_metrics.text(x, 0.65, value, fontsize=16, fontweight="bold", color=color,
-                       ha="center", transform=ax_metrics.transAxes)
-        ax_metrics.text(x, 0.25, label, fontsize=9, color="white",
-                       ha="center", transform=ax_metrics.transAxes)
-
-    ax_metrics.set_title(f"Investment Summary - {summary.params.holding_period_years} Year Hold",
-                        fontsize=14, fontweight="bold", color="white", pad=10)
-
-    # Bottom left - Profit timeline
-    ax_timeline = fig.add_subplot(gs[1, 0])
-    _setup_dark_style(fig, ax_timeline)
-
-    years = [p.year for p in summary.yearly_projections]
-    profits = [p.total_profit for p in summary.yearly_projections]
-    ax_timeline.plot(years, profits, color=COLORS["primary"], linewidth=2, marker="o", markersize=3)
-    ax_timeline.fill_between(years, profits, 0, alpha=0.3,
-                             where=[p >= 0 for p in profits], color=COLORS["profit"])
-    ax_timeline.fill_between(years, profits, 0, alpha=0.3,
-                             where=[p < 0 for p in profits], color=COLORS["loss"])
-    ax_timeline.axhline(y=0, color="white", linestyle="--", alpha=0.5)
-    ax_timeline.set_xlabel("Year", fontsize=8)
-    ax_timeline.set_ylabel("Profit ($)", fontsize=8)
-    ax_timeline.set_title("Profit Over Time", fontsize=10, fontweight="bold")
-    ax_timeline.tick_params(axis='both', labelsize=7)
-    ax_timeline.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
-
-    # Bottom right - Comparison vs S&P 500
-    ax_compare = fig.add_subplot(gs[1, 1])
-    _setup_dark_style(fig, ax_compare)
-
-    initial = summary.params.total_initial_investment
-    sp500_rate = summary.params.alternative_return_rate
-    years_full = [0] + years
-
-    # Property: net sale proceeds + cumulative cash flow (what you'd have if you sold)
-    property_values = [initial]
-    for p in summary.yearly_projections:
-        property_values.append(p.net_sale_proceeds + p.cumulative_cash_flow)
-
-    # S&P 500: simple compound growth
-    sp500_values = [initial * ((1 + sp500_rate) ** y) for y in years_full]
-
-    ax_compare.plot(years_full, property_values, color=COLORS["primary"], linewidth=2, label="Property")
-    ax_compare.plot(years_full, sp500_values, color=COLORS["alternative"], linewidth=2, label="S&P 500")
-    ax_compare.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=7)
-    ax_compare.set_xlabel("Year", fontsize=8)
-    ax_compare.set_ylabel("Value ($)", fontsize=8)
-    ax_compare.set_title("Property vs S&P 500", fontsize=10, fontweight="bold")
-    ax_compare.tick_params(axis='both', labelsize=7)
-    ax_compare.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
-
-    # Cash flow bar chart
-    ax_cashflow = fig.add_subplot(gs[2, 0])
-    _setup_dark_style(fig, ax_cashflow)
-
-    cash_flows = [p.net_cash_flow for p in summary.yearly_projections]
-    colors = [COLORS["profit"] if cf >= 0 else COLORS["loss"] for cf in cash_flows]
-    ax_cashflow.bar(years, cash_flows, color=colors, edgecolor="white", linewidth=0.5)
-    ax_cashflow.axhline(y=0, color="white", linewidth=0.5)
-    ax_cashflow.set_xlabel("Year", fontsize=8)
-    ax_cashflow.set_ylabel("Cash Flow ($)", fontsize=8)
-    ax_cashflow.set_title("Annual Cash Flow", fontsize=10, fontweight="bold")
-    ax_cashflow.tick_params(axis='both', labelsize=7)
-    ax_cashflow.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
-
-    # Equity growth
-    ax_equity = fig.add_subplot(gs[2, 1])
-    _setup_dark_style(fig, ax_equity)
-
-    equity = [p.equity for p in summary.yearly_projections]
-    loan_balance = [p.loan_balance for p in summary.yearly_projections]
-    property_value = [p.property_value for p in summary.yearly_projections]
-
-    ax_equity.fill_between(years, 0, loan_balance, alpha=0.7, color=COLORS["accent"], label="Loan")
-    ax_equity.fill_between(years, loan_balance, property_value, alpha=0.7, color=COLORS["equity"], label="Equity")
-    ax_equity.plot(years, property_value, color=COLORS["primary"], linewidth=2)
-    ax_equity.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white", fontsize=7)
-    ax_equity.set_xlabel("Year", fontsize=8)
-    ax_equity.set_ylabel("Value ($)", fontsize=8)
-    ax_equity.set_title("Equity Growth", fontsize=10, fontweight="bold")
-    ax_equity.tick_params(axis='both', labelsize=7)
-    ax_equity.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x/1000:.0f}k"))
-
-    return fig
-
-
 def plot_holding_period_analysis(params: InvestmentParameters) -> Figure:
     """
     Show how returns change with different holding periods.
@@ -625,60 +508,112 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
     """
     Plot comparing sell now and invest in stocks vs holding the property.
 
-    Shows two lines:
-    - "Sell Now" line: Net proceeds invested in S&P with compound growth
-    - "Hold" line: Net sale proceeds + cumulative cash flow if sold at that year
+    Shows four lines:
+    - Solid "Sell Now" line: S&P balance (pre-tax)
+    - Dashed "Sell Now" line: S&P balance after capital gains tax
+    - Solid "Hold" line: Net sale proceeds + cumulative cash flow (pre-tax)
+    - Dashed "Hold" line: After-tax proceeds + cumulative cash flow
+
+    The after-tax lines (dashed) show the true comparison.
     """
     fig, ax = plt.subplots(figsize=(12, 7))
     _setup_dark_style(fig, ax)
 
     df = analysis.comparison_df
     years = df["year"].tolist()
-    sell_now_values = df["sell_now_value"].tolist()
-    hold_values = df["hold_total_outcome"].tolist()
 
-    # Plot both scenarios
-    ax.plot(years, sell_now_values, color=COLORS["alternative"], linewidth=2.5,
-            marker="s", markersize=6, label="Sell Now & Invest in S&P")
-    ax.plot(years, hold_values, color=COLORS["primary"], linewidth=2.5,
-            marker="o", markersize=6, label="Hold & Sell Later")
+    # Pre-tax values (solid lines - lighter)
+    sell_now_pretax = df["sell_now_value"].tolist()
+    hold_pretax = df["hold_total_outcome"].tolist()
 
-    # Fill between to show which is better
-    ax.fill_between(years, sell_now_values, hold_values, alpha=0.3,
-                    where=[h >= s for h, s in zip(hold_values, sell_now_values)],
-                    color=COLORS["profit"], label="Hold Wins")
-    ax.fill_between(years, sell_now_values, hold_values, alpha=0.3,
-                    where=[h < s for h, s in zip(hold_values, sell_now_values)],
-                    color=COLORS["loss"], label="Sell Wins")
+    # After-tax values (dashed lines - primary comparison)
+    sell_now_aftertax = df["sell_after_tax"].tolist()
+    hold_aftertax = df["hold_after_tax"].tolist()
+
+    # Check if tax calculations differ from pre-tax (separately for each scenario)
+    sell_has_tax = sell_now_aftertax[-1] != sell_now_pretax[-1]
+    hold_has_tax = hold_aftertax[-1] != hold_pretax[-1]
+    has_tax_calc = sell_has_tax or hold_has_tax
+
+    if has_tax_calc:
+        # Plot pre-tax values as lighter solid lines (draw first so after-tax is on top)
+        # Only plot pre-tax if it differs from after-tax (otherwise it's redundant)
+        if sell_has_tax:
+            ax.plot(years, sell_now_pretax, color=COLORS["alternative"], linewidth=2,
+                    alpha=0.6, label="S&P (pre-tax)")
+        if hold_has_tax:
+            ax.plot(years, hold_pretax, color=COLORS["primary"], linewidth=2,
+                    alpha=0.6, label="Hold (pre-tax)")
+
+        # Plot after-tax values as bold dashed lines (primary comparison)
+        # If only one has tax, label accordingly
+        sell_label = "S&P (after-tax)" if sell_has_tax else "Sell Now & Invest in S&P"
+        hold_label = "Hold (after-tax)" if hold_has_tax else "Hold & Sell Later"
+
+        ax.plot(years, sell_now_aftertax, color=COLORS["alternative"], linewidth=2.5,
+                linestyle="--" if sell_has_tax else "-", marker="s", markersize=5, label=sell_label)
+        ax.plot(years, hold_aftertax, color=COLORS["primary"], linewidth=2.5,
+                linestyle="--" if hold_has_tax else "-", marker="o", markersize=5, label=hold_label)
+
+        # Fill between after-tax values to show which is better
+        ax.fill_between(years, sell_now_aftertax, hold_aftertax, alpha=0.3,
+                        where=[h >= s for h, s in zip(hold_aftertax, sell_now_aftertax)],
+                        color=COLORS["profit"])
+        ax.fill_between(years, sell_now_aftertax, hold_aftertax, alpha=0.3,
+                        where=[h < s for h, s in zip(hold_aftertax, sell_now_aftertax)],
+                        color=COLORS["loss"])
+
+        # Use after-tax values for crossover and annotations
+        sell_values = sell_now_aftertax
+        hold_values = hold_aftertax
+    else:
+        # No tax calculation - just show pre-tax values
+        ax.plot(years, sell_now_pretax, color=COLORS["alternative"], linewidth=2.5,
+                marker="s", markersize=6, label="Sell Now & Invest in S&P")
+        ax.plot(years, hold_pretax, color=COLORS["primary"], linewidth=2.5,
+                marker="o", markersize=6, label="Hold & Sell Later")
+
+        # Fill between to show which is better
+        ax.fill_between(years, sell_now_pretax, hold_pretax, alpha=0.3,
+                        where=[h >= s for h, s in zip(hold_pretax, sell_now_pretax)],
+                        color=COLORS["profit"])
+        ax.fill_between(years, sell_now_pretax, hold_pretax, alpha=0.3,
+                        where=[h < s for h, s in zip(hold_pretax, sell_now_pretax)],
+                        color=COLORS["loss"])
+
+        sell_values = sell_now_pretax
+        hold_values = hold_pretax
 
     # Find crossover point if any
     for i in range(1, len(years)):
-        prev_diff = hold_values[i-1] - sell_now_values[i-1]
-        curr_diff = hold_values[i] - sell_now_values[i]
+        prev_diff = hold_values[i-1] - sell_values[i-1]
+        curr_diff = hold_values[i] - sell_values[i]
         if prev_diff * curr_diff < 0:  # Sign change = crossover
             ax.axvline(x=years[i], color=COLORS["warning"], linestyle=":", alpha=0.8)
             ax.annotate(f"Crossover\nYear {years[i]}",
-                       xy=(years[i], (hold_values[i] + sell_now_values[i]) / 2),
+                       xy=(years[i], (hold_values[i] + sell_values[i]) / 2),
                        xytext=(years[i] + 0.5, max(hold_values) * 0.9),
                        fontsize=10, color="white",
                        arrowprops=dict(arrowstyle="->", color=COLORS["warning"]))
             break
 
-    # Annotate final values
+    # Annotate final values (after-tax)
     final_year = years[-1]
-    ax.annotate(f"${sell_now_values[-1]:,.0f}",
-               xy=(final_year, sell_now_values[-1]),
-               xytext=(final_year + 0.3, sell_now_values[-1]),
+    label_suffix = " (after tax)" if has_tax_calc else ""
+    ax.annotate(f"${sell_values[-1]:,.0f}{label_suffix}",
+               xy=(final_year, sell_values[-1]),
+               xytext=(final_year + 0.3, sell_values[-1]),
                fontsize=11, color=COLORS["alternative"], fontweight="bold")
-    ax.annotate(f"${hold_values[-1]:,.0f}",
+    ax.annotate(f"${hold_values[-1]:,.0f}{label_suffix}",
                xy=(final_year, hold_values[-1]),
                xytext=(final_year + 0.3, hold_values[-1]),
                fontsize=11, color=COLORS["primary"], fontweight="bold")
 
     # Add starting point annotation
-    ax.annotate(f"Net if sold today:\n${analysis.net_proceeds_if_sell_now:,.0f}",
-               xy=(0, analysis.net_proceeds_if_sell_now),
-               xytext=(0.5, analysis.net_proceeds_if_sell_now * 1.15),
+    start_value = analysis.after_tax_proceeds_if_sell_now
+    ax.annotate(f"After-tax proceeds:\n${start_value:,.0f}",
+               xy=(0, start_value),
+               xytext=(0.5, start_value * 1.15),
                fontsize=10, color="white",
                arrowprops=dict(arrowstyle="->", color="white", alpha=0.5))
 
@@ -690,19 +625,38 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
             bbox=dict(boxstyle="round", facecolor="#2c3e50", edgecolor=recommendation_color))
 
     # Add methodology note
-    ax.text(0.98, 0.02, "Sell Now = S&P compound growth\nHold = sale proceeds + cumulative cash flow",
+    if sell_has_tax and hold_has_tax:
+        note = "Dashed = after-tax values (actual cash)\nSolid = pre-tax values"
+    elif sell_has_tax:
+        note = "S&P: Dashed = after-tax, Solid = pre-tax\nHold: No tax calc (enter Original Purchase Price)"
+    elif hold_has_tax:
+        note = "S&P: No tax calc\nHold: Dashed = after-tax, Solid = pre-tax"
+    else:
+        note = "Sell Now = S&P compound growth\nHold = sale proceeds + cumulative cash flow"
+    ax.text(0.98, 0.02, note,
             transform=ax.transAxes, fontsize=8, color="gray",
             verticalalignment="bottom", horizontalalignment="right",
             style="italic")
 
     ax.set_xlabel("Years from Now", fontsize=12)
     ax.set_ylabel("Total Accumulated Wealth ($)", fontsize=12)
-    ax.set_title("Sell Now vs. Continue Holding", fontsize=14, fontweight="bold")
+    if sell_has_tax and hold_has_tax:
+        title = "Sell Now vs. Continue Holding (After-Tax Comparison)"
+    elif has_tax_calc:
+        title = "Sell Now vs. Continue Holding (Partial Tax Calculation)"
+    else:
+        title = "Sell Now vs. Continue Holding"
+    ax.set_title(title, fontsize=14, fontweight="bold")
     ax.legend(loc="lower right", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"${x:,.0f}"))
 
     # Start y-axis from 0 or just below the minimum value
-    min_val = min(min(sell_now_values), min(hold_values))
+    all_values = sell_values + hold_values
+    if sell_has_tax:
+        all_values += sell_now_pretax
+    if hold_has_tax:
+        all_values += hold_pretax
+    min_val = min(all_values)
     ax.set_ylim(bottom=max(0, min_val * 0.9))
 
     return fig

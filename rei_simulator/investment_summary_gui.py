@@ -57,12 +57,20 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         # Tax benefits from Asset Building tab
         self._marginal_tax_rate: float = 0.0
         self._depreciation_enabled: bool = False
+        self._qbi_deduction_enabled: bool = False
 
         # Renovation parameters from Amortization tab
         self._renovation_enabled: bool = False
         self._renovation_cost: float = 0
         self._renovation_duration_months: int = 0
         self._rent_during_renovation_pct: float = 0
+
+        # Capital gains tax parameters (for existing property mode)
+        self._original_purchase_price: float = 0
+        self._capital_improvements: float = 0
+        self._years_owned: int = 0
+        self._was_rental: bool = False
+        self._cap_gains_rate: float = 0.15
 
         # Create main layout - left inputs, right plots
         self.grid_columnconfigure(0, weight=0)
@@ -123,11 +131,12 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         utilities_annual: float,
         marginal_tax_rate: float = 0.0,
         depreciation_enabled: bool = False,
+        qbi_deduction_enabled: bool = False,
     ):
         """Set asset building parameters from the Asset Building tab.
 
         Operating costs (maintenance, utilities) originate from Recurring Costs tab.
-        Tax benefits (marginal_tax_rate, depreciation_enabled) from Asset Building tab.
+        Tax benefits (marginal_tax_rate, depreciation_enabled, qbi_deduction_enabled) from Asset Building tab.
         """
         self._appreciation_rate = appreciation_rate
         self._monthly_rent = monthly_rent
@@ -140,11 +149,18 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         # Tax benefits from Asset Building tab
         self._marginal_tax_rate = marginal_tax_rate
         self._depreciation_enabled = depreciation_enabled
+        self._qbi_deduction_enabled = qbi_deduction_enabled
 
     def set_analysis_mode(self, is_existing_property: bool):
         """Set the analysis mode and update available plots accordingly."""
         self._is_existing_property = is_existing_property
         self._update_plot_options()
+
+        # Show/hide capital gains tax section based on mode
+        if is_existing_property:
+            self.tax_section_frame.pack(fill="x", after=self.selling_cost_entry)
+        else:
+            self.tax_section_frame.pack_forget()
 
     def set_renovation_params(
         self,
@@ -247,6 +263,98 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             tooltip_title="Agent Commission + Closing Costs",
         )
         self.selling_cost_entry.pack(fill="x", pady=5)
+
+        # Capital Gains Tax Section (only for existing property mode)
+        self.tax_section_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
+        # Don't pack initially - will be shown/hidden based on mode
+
+        self.tax_section_header = ctk.CTkLabel(
+            self.tax_section_frame,
+            text="Capital Gains Tax",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.tax_section_header.pack(anchor="w", pady=(15, 5))
+
+        self.tax_info_label = ctk.CTkLabel(
+            self.tax_section_frame,
+            text="For accurate sell vs hold comparison",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        self.tax_info_label.pack(anchor="w", pady=(0, 5))
+
+        self.original_purchase_entry = LabeledEntry(
+            self.tax_section_frame,
+            "Original Purchase Price ($):",
+            "0",
+            tooltip=(
+                "What you originally paid for the property.\n\n"
+                "Used to calculate your cost basis for capital gains tax.\n"
+                "If $0, tax calculation will be skipped."
+            ),
+            tooltip_title="Original Purchase Price",
+        )
+        self.original_purchase_entry.pack(fill="x", pady=5)
+
+        self.capital_improvements_entry = LabeledEntry(
+            self.tax_section_frame,
+            "Capital Improvements ($):",
+            "0",
+            tooltip=(
+                "Major improvements that add to your cost basis:\n\n"
+                "• New roof, HVAC, windows\n"
+                "• Kitchen/bath remodels\n"
+                "• Room additions\n\n"
+                "NOT routine repairs or maintenance."
+            ),
+            tooltip_title="Capital Improvements",
+        )
+        self.capital_improvements_entry.pack(fill="x", pady=5)
+
+        self.years_owned_entry = LabeledEntry(
+            self.tax_section_frame,
+            "Years Owned:",
+            "0",
+            tooltip=(
+                "Number of years you've owned the property.\n\n"
+                "Used to calculate depreciation recapture\n"
+                "if this was a rental property."
+            ),
+            tooltip_title="Years Owned",
+        )
+        self.years_owned_entry.pack(fill="x", pady=5)
+
+        self.cap_gains_rate_entry = LabeledEntry(
+            self.tax_section_frame,
+            "Capital Gains Rate (%):",
+            "15",
+            tooltip=(
+                "Your long-term capital gains tax rate:\n\n"
+                "• 0% for income up to ~$44k (single)\n"
+                "• 15% for income $44k-$492k (single)\n"
+                "• 20% for income above $492k\n\n"
+                "Most people are at 15%."
+            ),
+            tooltip_title="Capital Gains Rate",
+        )
+        self.cap_gains_rate_entry.pack(fill="x", pady=5)
+
+        # Was rental checkbox
+        self.was_rental_var = ctk.BooleanVar(value=False)
+        self.was_rental_checkbox = ctk.CTkCheckBox(
+            self.tax_section_frame,
+            text="This was a rental property",
+            variable=self.was_rental_var,
+        )
+        self.was_rental_checkbox.pack(anchor="w", pady=(5, 0))
+
+        self.rental_info_label = ctk.CTkLabel(
+            self.tax_section_frame,
+            text="(Adds 25% depreciation recapture tax)",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        self.rental_info_label.pack(anchor="w", padx=(25, 0), pady=(0, 10))
 
         # Investment Comparison Section
         self._create_section_header("Compare To")
@@ -476,8 +584,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         ]
         self._existing_property_plots = [
             "Sell Now vs Hold",            # Should I sell or keep holding?
-            "Investment Dashboard",        # The big picture
-            "vs Alternative Investments",  # Continue holding vs stocks
             "Profit Over Time",            # When do I break even if I keep holding?
             "Holding Period Analysis",     # How long should I hold before selling?
         ]
@@ -577,6 +683,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             # Tax benefits from Asset Building tab
             marginal_tax_rate=self._marginal_tax_rate,
             depreciation_enabled=self._depreciation_enabled,
+            qbi_deduction_enabled=self._qbi_deduction_enabled,
         )
 
     def calculate(self):
@@ -594,11 +701,24 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             if self._is_existing_property:
                 # Current equity is down_payment (which in existing property mode = value - loan balance)
                 current_equity = self._down_payment
+
+                # Get tax parameters from GUI inputs
+                original_purchase = safe_positive_float(self.original_purchase_entry.get(), 0.0)
+                capital_improvements = safe_positive_float(self.capital_improvements_entry.get(), 0.0)
+                years_owned = int(safe_positive_float(self.years_owned_entry.get(), 0.0))
+                cap_gains_rate = safe_percent(self.cap_gains_rate_entry.get(), 0.15)
+                was_rental = self.was_rental_var.get()
+
                 self.sell_now_analysis = generate_sell_now_vs_hold_analysis(
                     params=params,
                     current_equity=current_equity,
                     current_property_value=self._property_value,
                     analysis_years=self.holding_period_var.get(),
+                    original_purchase_price=original_purchase,
+                    capital_improvements=capital_improvements,
+                    years_owned=years_owned,
+                    was_rental=was_rental,
+                    cap_gains_rate=cap_gains_rate,
                 )
             else:
                 self.sell_now_analysis = None
@@ -650,14 +770,10 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         plot_type = self.plot_var.get()
 
         plot_functions = {
-            # New Purchase mode plots (simple single charts)
             "Property vs S&P 500": plots.plot_investment_comparison,
             "Profit Over Time": plots.plot_profit_timeline,
             "Annual Cash Flow": plots.plot_annual_cash_flow,
             "Equity Growth": plots.plot_equity_vs_loan,
-            # Existing Property mode plots
-            "Investment Dashboard": plots.plot_investment_dashboard,
-            "vs Alternative Investments": plots.plot_investment_comparison,
         }
 
         if plot_type == "Holding Period Analysis":
@@ -667,9 +783,7 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         else:
             fig = plot_functions[plot_type](self.summary)
 
-        # Don't use tight_layout for dashboard (has gridspec that doesn't support it)
-        if plot_type != "Investment Dashboard":
-            fig.tight_layout()
+        fig.tight_layout()
 
         # Embed in tkinter
         self.canvas = FigureCanvasTkAgg(fig, master=self.canvas_frame)
@@ -690,6 +804,12 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         self.selling_cost_entry.set(cfg.get("selling_cost", "6.0"))
         self.alternative_return_entry.set(cfg.get("sp500_return", "10.0"))
         self.initial_reserves_entry.set(cfg.get("initial_reserves", "10000"))
+        # Capital gains tax fields
+        self.original_purchase_entry.set(cfg.get("original_purchase_price", "0"))
+        self.capital_improvements_entry.set(cfg.get("capital_improvements", "0"))
+        self.years_owned_entry.set(cfg.get("years_owned", "0"))
+        self.cap_gains_rate_entry.set(cfg.get("cap_gains_rate", "15"))
+        self.was_rental_var.set(cfg.get("was_rental", False))
 
     def save_config(self) -> dict:
         """Save current field values to config dict."""
@@ -698,6 +818,12 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             "selling_cost": self.selling_cost_entry.get(),
             "sp500_return": self.alternative_return_entry.get(),
             "initial_reserves": self.initial_reserves_entry.get(),
+            # Capital gains tax fields
+            "original_purchase_price": self.original_purchase_entry.get(),
+            "capital_improvements": self.capital_improvements_entry.get(),
+            "years_owned": self.years_owned_entry.get(),
+            "cap_gains_rate": self.cap_gains_rate_entry.get(),
+            "was_rental": self.was_rental_var.get(),
         }
 
     def get_holding_years(self) -> int:
