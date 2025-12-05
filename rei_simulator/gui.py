@@ -110,17 +110,17 @@ class AmortizationTab(ctk.CTkFrame):
 
         self.property_tax_entry = LabeledEntry(
             self.input_frame,
-            "Property Tax Rate (%):",
-            "1.2",
+            "Annual Property Tax ($):",
+            "4800",
             tooltip=(
-                "Annual property tax as a percentage of property value.\n\n"
-                "• National average is ~1.1%\n"
-                "• Varies widely: 0.3% (Hawaii) to 2.5% (New Jersey)\n"
-                "• Check your county assessor's website\n\n"
-                "Some areas reassess on sale, which may "
+                "Annual property tax amount in dollars.\n\n"
+                "• Find this on your tax bill or county website\n"
+                "• $4,000-6,000/year typical for $400k home\n"
+                "• Varies widely by location\n\n"
+                "Note: Some areas reassess on sale, which may "
                 "increase taxes significantly."
             ),
-            tooltip_title="Property Tax Rate",
+            tooltip_title="Annual Property Tax",
         )
         self.property_tax_entry.pack(fill="x", pady=5)
 
@@ -540,7 +540,9 @@ class AmortizationTab(ctk.CTkFrame):
             purchase_price = property_value
 
         # Property ownership costs (apply whether or not there's a loan)
-        property_tax_rate = safe_percent(self.property_tax_entry.get(), 0.012)  # default 1.2%
+        # Property tax is entered as annual dollar amount, convert to rate
+        property_tax_annual = safe_positive_float(self.property_tax_entry.get(), 4800.0)
+        property_tax_rate = property_tax_annual / property_value if property_value > 0 else 0.012
         insurance_annual = safe_positive_float(self.insurance_entry.get(), 0.0)
         hoa_monthly = safe_positive_float(self.hoa_entry.get(), 0.0)
 
@@ -750,7 +752,7 @@ class AmortizationTab(ctk.CTkFrame):
         self.interest_rate_entry.set(cfg.get("interest_rate", "6.5"))
         self.loan_term_entry.set(cfg.get("loan_term", "30"))
         self.frequency_var.set(cfg.get("payment_frequency", "Monthly"))
-        self.property_tax_entry.set(cfg.get("property_tax_rate", "1.2"))
+        self.property_tax_entry.set(cfg.get("property_tax_annual", "4800"))
         self.insurance_entry.set(cfg.get("insurance_annual", "1800"))
         self.pmi_rate_entry.set(cfg.get("pmi_rate", "0.5"))
         self.hoa_entry.set(cfg.get("hoa_monthly", "0"))
@@ -779,7 +781,7 @@ class AmortizationTab(ctk.CTkFrame):
             "interest_rate": self.interest_rate_entry.get(),
             "loan_term": self.loan_term_entry.get(),
             "payment_frequency": self.frequency_var.get(),
-            "property_tax_rate": self.property_tax_entry.get(),
+            "property_tax_annual": self.property_tax_entry.get(),
             "insurance_annual": self.insurance_entry.get(),
             "pmi_rate": self.pmi_rate_entry.get(),
             "hoa_monthly": self.hoa_entry.get(),
@@ -910,6 +912,7 @@ class MainApplication(ctk.CTk):
 
     def _on_close(self):
         """Handle window close - cleanup and exit quickly."""
+        import gc
         import matplotlib.pyplot as plt
 
         # Cancel any pending after callbacks to prevent delays
@@ -921,6 +924,9 @@ class MainApplication(ctk.CTk):
 
         # Close matplotlib figures without triggering callbacks
         plt.close('all')
+
+        # Force garbage collection
+        gc.collect()
 
         # Destroy immediately - quit() can cause delays
         self.destroy()

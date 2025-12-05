@@ -23,7 +23,7 @@ def get_default_config() -> dict[str, Any]:
             "interest_rate": "6.5",
             "loan_term": "30",
             "payment_frequency": "Monthly",
-            "property_tax_rate": "1.2",
+            "property_tax_annual": "4800",
             "insurance_annual": "1800",
             "pmi_rate": "0.5",
             "hoa_monthly": "0",
