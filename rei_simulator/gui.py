@@ -10,7 +10,7 @@ from .amortization import (
     AmortizationSchedule,
 )
 from . import plots
-from .widgets import LabeledEntry
+from .widgets import LabeledEntry, LabeledCheckBox, LabeledOptionMenu, TooltipButton
 from .recurring_costs_gui import RecurringCostsTab
 from .asset_building_gui import AssetBuildingTab
 from .investment_summary_gui import InvestmentSummaryTab
@@ -111,12 +111,20 @@ class AmortizationTab(ctk.CTkFrame):
         # ===== LOAN SECTION =====
         # Has Loan checkbox - prominent toggle
         self.has_loan_var = ctk.BooleanVar(value=True)
-        self.has_loan_check = ctk.CTkCheckBox(
+        self.has_loan_check = LabeledCheckBox(
             self.input_frame,
             text="Property Has a Loan",
-            font=ctk.CTkFont(size=14, weight="bold"),
             variable=self.has_loan_var,
-            command=self._toggle_loan_fields
+            command=self._toggle_loan_fields,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            tooltip=(
+                "Check if the property has a mortgage or loan.\n\n"
+                "• Checked: Enter loan details (down payment, rate, term)\n"
+                "• Unchecked: All-cash purchase, no loan costs\n\n"
+                "For existing properties, check if you still have "
+                "a mortgage balance."
+            ),
+            tooltip_title="Property Has a Loan",
         )
         self.has_loan_check.pack(anchor="w", pady=(20, 5))
 
@@ -180,20 +188,23 @@ class AmortizationTab(ctk.CTkFrame):
         self.loan_term_entry.pack(fill="x", pady=5, padx=10)
 
         # Payment frequency
-        freq_frame = ctk.CTkFrame(self.loan_frame, fg_color="transparent")
-        freq_frame.pack(fill="x", pady=5, padx=10)
-
-        freq_label = ctk.CTkLabel(freq_frame, text="Payment Frequency:", anchor="w", width=180)
-        freq_label.pack(side="left", padx=(0, 10))
-
         self.frequency_var = ctk.StringVar(value="Monthly")
-        self.frequency_menu = ctk.CTkOptionMenu(
-            freq_frame,
+        self.frequency_menu = LabeledOptionMenu(
+            self.loan_frame,
+            label="Payment Frequency:",
             variable=self.frequency_var,
             values=["Monthly", "Biweekly", "Weekly"],
-            width=120
+            tooltip=(
+                "How often you make mortgage payments.\n\n"
+                "• Monthly: 12 payments/year (standard)\n"
+                "• Biweekly: 26 payments/year (saves interest)\n"
+                "• Weekly: 52 payments/year (most savings)\n\n"
+                "Biweekly/weekly results in extra payments per year, "
+                "reducing total interest and paying off faster."
+            ),
+            tooltip_title="Payment Frequency",
         )
-        self.frequency_menu.pack(side="left")
+        self.frequency_menu.pack(fill="x", pady=5, padx=10)
 
         # Loan-specific costs section
         loan_costs_label = ctk.CTkLabel(
@@ -318,6 +329,23 @@ class AmortizationTab(ctk.CTkFrame):
         )
         self.plot_menu.pack(side="left", padx=10)
 
+        plot_tooltip = TooltipButton(
+            select_frame,
+            tooltip=(
+                "Available charts:\n\n"
+                "• Total Monthly Cost: Your complete monthly payment "
+                "over time, including P&I, taxes, insurance, PMI\n\n"
+                "• Payment Breakdown: See how each payment splits "
+                "between principal and interest\n\n"
+                "• Balance Over Time: Watch your loan balance decrease "
+                "and equity grow\n\n"
+                "• LTV Over Time: Track loan-to-value ratio to see "
+                "when you can drop PMI (at 80%)"
+            ),
+            tooltip_title="Chart Options",
+        )
+        plot_tooltip.pack(side="left", padx=(0, 10))
+
         # Canvas frame for matplotlib
         self.canvas_frame = ctk.CTkFrame(self.plot_frame)
         self.canvas_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
@@ -332,12 +360,22 @@ class AmortizationTab(ctk.CTkFrame):
         """Create the collapsible renovation/rehab section."""
         # Renovation header with checkbox
         self.renovation_var = ctk.BooleanVar(value=False)
-        self.renovation_check = ctk.CTkCheckBox(
+        self.renovation_check = LabeledCheckBox(
             self.input_frame,
             text="Include Renovation/Rehab",
-            font=ctk.CTkFont(size=14, weight="bold"),
             variable=self.renovation_var,
-            command=self._toggle_renovation_fields
+            command=self._toggle_renovation_fields,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            tooltip=(
+                "Check if you're buying a property to renovate.\n\n"
+                "When enabled, you can enter:\n"
+                "• Purchase Price (what you pay)\n"
+                "• Renovation Cost (rehab budget)\n"
+                "• Duration (months to complete)\n\n"
+                "The Property Value above becomes your ARV "
+                "(After Repair Value)."
+            ),
+            tooltip_title="Include Renovation/Rehab",
         )
         self.renovation_check.pack(anchor="w", pady=(20, 5))
 
@@ -802,34 +840,12 @@ class MainApplication(ctk.CTk):
             text="Export Summary",
             command=self._export_summary,
             height=50,
-            width=150,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            width=200,
+            font=ctk.CTkFont(size=16, weight="bold"),
             fg_color="#3498db",
             hover_color="#2980b9",
         )
         self.export_btn.pack(side="left", padx=10)
-
-        # Separator
-        separator = ctk.CTkFrame(self.button_frame, width=2, height=40, fg_color="gray50")
-        separator.pack(side="left", padx=15)
-
-        # Analysis Mode selector (prominent placement - changes entire analysis)
-        mode_label = ctk.CTkLabel(
-            self.button_frame,
-            text="Analysis Mode:",
-            font=ctk.CTkFont(size=12, weight="bold")
-        )
-        mode_label.pack(side="left", padx=(0, 5))
-
-        self.analysis_mode_var = ctk.StringVar(value="New Purchase")
-        self.mode_segment = ctk.CTkSegmentedButton(
-            self.button_frame,
-            values=["New Purchase", "Existing Property"],
-            variable=self.analysis_mode_var,
-            command=self._on_analysis_mode_change,
-            height=40,
-        )
-        self.mode_segment.pack(side="left", padx=(0, 15))
 
         # Status label
         self.status_label = ctk.CTkLabel(
@@ -839,6 +855,40 @@ class MainApplication(ctk.CTk):
             text_color="gray"
         )
         self.status_label.pack(side="left", padx=20)
+
+        # Analysis Mode selector (pushed to right side)
+        self.analysis_mode_var = ctk.StringVar(value="New Purchase")
+        self.mode_segment = ctk.CTkSegmentedButton(
+            self.button_frame,
+            values=["New Purchase", "Existing Property"],
+            variable=self.analysis_mode_var,
+            command=self._on_analysis_mode_change,
+            height=40,
+        )
+        self.mode_segment.pack(side="right", padx=10)
+
+        mode_tooltip = TooltipButton(
+            self.button_frame,
+            tooltip=(
+                "Choose your analysis type:\n\n"
+                "• New Purchase: Evaluate a property you're "
+                "considering buying. Compare to stock market returns.\n\n"
+                "• Existing Property: Analyze a property you already "
+                "own. See 'Sell Now vs Hold' comparisons and optimal "
+                "holding period.\n\n"
+                "The Analysis tab will show different charts and "
+                "inputs based on this selection."
+            ),
+            tooltip_title="Analysis Mode",
+        )
+        mode_tooltip.pack(side="right", padx=(0, 5))
+
+        mode_label = ctk.CTkLabel(
+            self.button_frame,
+            text="Analysis Mode:",
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        mode_label.pack(side="right", padx=(0, 5))
 
         # Create tabview
         self.tabview = ctk.CTkTabview(self.main_frame)

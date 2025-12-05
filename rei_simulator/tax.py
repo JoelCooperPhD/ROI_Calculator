@@ -11,7 +11,6 @@ All calculations are based on US tax law. Consult a tax professional for actual 
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from .constants import (
     DEPRECIATION_YEARS_RESIDENTIAL,

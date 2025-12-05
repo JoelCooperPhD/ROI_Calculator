@@ -13,12 +13,10 @@ All formulas include docstrings with the mathematical notation.
 """
 
 import numpy as np
-from typing import Union
 
 from .constants import (
     MONTHS_PER_YEAR,
     PMI_LTV_THRESHOLD,
-    LOAN_PAYOFF_TOLERANCE,
 )
 
 

@@ -3,15 +3,16 @@
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
-from .widgets import LabeledEntry
+from .widgets import LabeledEntry, TooltipButton
 from .asset_building import (
     AssetBuildingParameters,
+    AssetBuildingSchedule,
     AppreciationParameters,
     RentalIncomeParameters,
     generate_asset_building_schedule,
 )
 from . import asset_building_plots as plots
-from .validation import safe_float, safe_positive_float, safe_percent
+from .validation import safe_positive_float, safe_percent
 
 
 class AssetBuildingTab(ctk.CTkFrame):
@@ -259,6 +260,23 @@ class AssetBuildingTab(ctk.CTkFrame):
             width=200
         )
         self.plot_menu.pack(side="left", padx=10)
+
+        plot_tooltip = TooltipButton(
+            select_frame,
+            tooltip=(
+                "Available charts:\n\n"
+                "• Equity Growth: Track total equity from loan "
+                "paydown + appreciation\n\n"
+                "• Cash Flow: Annual cash flow from rental income "
+                "minus all expenses\n\n"
+                "• Wealth Waterfall: Breakdown of where your returns "
+                "came from (appreciation, equity, cash flow)\n\n"
+                "• Rental Income Breakdown: Shows if rent covers "
+                "mortgage, expenses, and generates profit"
+            ),
+            tooltip_title="Chart Options",
+        )
+        plot_tooltip.pack(side="left", padx=(0, 10))
 
         # Canvas frame for matplotlib
         self.canvas_frame = ctk.CTkFrame(self.plot_frame)

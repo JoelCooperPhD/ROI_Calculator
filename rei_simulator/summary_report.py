@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 import webbrowser
 import tempfile
@@ -10,7 +9,7 @@ import tempfile
 from .amortization import AmortizationSchedule
 from .recurring_costs import RecurringCostSchedule
 from .asset_building import AssetBuildingSchedule
-from .investment_summary import InvestmentSummary, InvestmentParameters, SellNowVsHoldAnalysis
+from .investment_summary import InvestmentSummary, SellNowVsHoldAnalysis
 
 
 @dataclass
@@ -137,20 +136,6 @@ _CSS_STYLES = """
             margin-bottom: 0.5rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-        }
-
-        .grade-badge {
-            display: inline-block;
-            font-size: 2.5rem;
-            font-weight: bold;
-            width: 70px;
-            height: 70px;
-            line-height: 70px;
-            text-align: center;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.2);
-            float: right;
-            margin-top: -0.5rem;
         }
 
         .section {
@@ -412,8 +397,6 @@ def _generate_new_purchase_report(data: ReportData) -> str:
     irr = inv.irr if inv else 0
     total_roi = inv.total_roi if inv else 0
     annualized_roi = inv.annualized_roi if inv else 0
-    grade = inv.grade if inv else "N/A"
-    grade_rationale = inv.grade_rationale if inv else ""
 
     # Stock comparison
     alt_profit = inv.alternative_profit if inv else 0
@@ -516,7 +499,6 @@ def _generate_new_purchase_report(data: ReportData) -> str:
 <body>
     <div class="container">
         <header class="new-purchase">
-            <span class="grade-badge">{grade}</span>
             <div class="analysis-type">New Purchase Analysis</div>
             <h1>Investment Analysis Summary</h1>
             <p class="subtitle">Generated {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</p>
@@ -543,7 +525,6 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                     <div class="metric-value">{annualized_roi:.1f}%</div>
                 </div>
             </div>
-            <div class="rationale">{grade_rationale}</div>
         </div>
 
         <!-- Property & Loan Details -->
@@ -818,8 +799,6 @@ def _generate_existing_property_report(data: ReportData) -> str:
     irr = inv.irr if inv else 0
     total_roi = inv.total_roi if inv else 0
     annualized_roi = inv.annualized_roi if inv else 0
-    grade = inv.grade if inv else "N/A"
-    grade_rationale = inv.grade_rationale if inv else ""
 
     # Final values from asset building
     final_property_value = asset.schedule['property_value'].iloc[-1] if asset else data.property_value
@@ -937,7 +916,6 @@ def _generate_existing_property_report(data: ReportData) -> str:
 <body>
     <div class="container">
         <header class="existing-property">
-            <span class="grade-badge">{grade}</span>
             <div class="analysis-type">Existing Property Analysis</div>
             <h1>Should You Hold or Sell?</h1>
             <p class="subtitle">Generated {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</p>
@@ -970,8 +948,6 @@ def _generate_existing_property_report(data: ReportData) -> str:
                     <strong>{_format_currency(abs(advantage_amount))}</strong>
                 </div>
             </div>
-
-            <div class="rationale">{grade_rationale}</div>
         </div>
 
         <!-- Current Position -->

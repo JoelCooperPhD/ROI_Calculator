@@ -3,7 +3,7 @@
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
-from .widgets import LabeledEntry
+from .widgets import LabeledEntry, TooltipButton
 from .recurring_costs import (
     PropertyCostParameters,
     RecurringCostItem,
@@ -278,6 +278,19 @@ class RecurringCostsTab(ctk.CTkFrame):
             width=200
         )
         self.plot_menu.pack(side="left", padx=10)
+
+        plot_tooltip = TooltipButton(
+            select_frame,
+            tooltip=(
+                "Available charts:\n\n"
+                "• True Cost Waterfall: Shows how costs build up "
+                "from base mortgage to total monthly payment\n\n"
+                "• Costs by Category: Breakdown of recurring costs "
+                "by type (taxes, insurance, utilities, etc.)"
+            ),
+            tooltip_title="Chart Options",
+        )
+        plot_tooltip.pack(side="left", padx=(0, 10))
 
         # Canvas frame for matplotlib
         self.canvas_frame = ctk.CTkFrame(self.plot_frame)

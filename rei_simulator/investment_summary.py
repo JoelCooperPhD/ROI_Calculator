@@ -21,7 +21,7 @@ from .constants import (
     QBI_DEDUCTION_RATE,
 )
 from .formulas import calculate_periodic_payment
-from .metrics import calculate_irr, calculate_investment_grade
+from .metrics import calculate_irr
 from .comparison import generate_alternative_comparison
 from .tax import calculate_sale_tax as _calculate_sale_tax, SaleTaxEstimate
 
@@ -190,10 +190,6 @@ class InvestmentSummary:
     total_capital_deployed: float  # All cash out of pocket over holding period
     cumulative_negative_cash_flows: float  # Additional capital beyond initial
 
-    # Investment grade
-    grade: str
-    grade_rationale: str
-
     # Cash flow summary
     total_cash_invested: float
     total_cash_flow_received: float
@@ -285,8 +281,7 @@ def generate_amortization_balances(
     return balances, interest_by_year
 
 
-# Note: calculate_irr and calculate_investment_grade are now imported from metrics.py
-# These functions used to be defined here but are now centralized in the metrics module
+# Note: calculate_irr is imported from metrics.py
 
 
 def generate_investment_summary(params: InvestmentParameters) -> InvestmentSummary:
@@ -486,14 +481,6 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
     total_capital_deployed = alt_comparison.total_capital_deployed
     cumulative_negative_cash_flows = alt_comparison.cumulative_negative_cash_flows
 
-    # Get investment grade based on full hold period performance vs stocks
-    grade, rationale = calculate_investment_grade(
-        irr=irr,
-        equity_multiple=equity_multiple,
-        outperformance=outperformance,
-        alternative_return_rate=params.alternative_return_rate
-    )
-
     return InvestmentSummary(
         params=params,
         yearly_projections=yearly_projections,
@@ -509,8 +496,6 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         alternative_simple_profit=alternative_simple_profit,
         total_capital_deployed=total_capital_deployed,
         cumulative_negative_cash_flows=cumulative_negative_cash_flows,
-        grade=grade,
-        grade_rationale=rationale,
         total_cash_invested=params.total_initial_investment,
         total_cash_flow_received=final.cumulative_cash_flow,
         net_sale_proceeds=final.net_sale_proceeds,

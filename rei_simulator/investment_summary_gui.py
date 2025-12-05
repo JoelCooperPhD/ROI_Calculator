@@ -3,7 +3,7 @@
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
-from .widgets import LabeledEntry
+from .widgets import LabeledEntry, LabeledCheckBox, TooltipButton
 from .investment_summary import (
     InvestmentParameters,
     InvestmentSummary,
@@ -12,7 +12,7 @@ from .investment_summary import (
     SellNowVsHoldAnalysis,
 )
 from . import investment_summary_plots as plots
-from .validation import safe_float, safe_positive_float, safe_percent
+from .validation import safe_positive_float, safe_percent
 
 
 class InvestmentSummaryTab(ctk.CTkFrame):
@@ -203,12 +203,31 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         slider_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
         slider_frame.pack(fill="x", pady=5)
 
+        label_frame = ctk.CTkFrame(slider_frame, fg_color="transparent")
+        label_frame.pack(pady=(0, 5))
+
         self.holding_period_label = ctk.CTkLabel(
-            slider_frame,
+            label_frame,
             text="Hold for: 10 years",
             font=ctk.CTkFont(size=14, weight="bold")
         )
-        self.holding_period_label.pack(pady=(0, 5))
+        self.holding_period_label.pack(side="left")
+
+        holding_tooltip = TooltipButton(
+            label_frame,
+            tooltip=(
+                "How long you plan to hold the property before selling.\n\n"
+                "This affects:\n"
+                "• Total appreciation and equity growth\n"
+                "• Cumulative cash flow from rent\n"
+                "• Comparison with stock market returns\n"
+                "• Break-even analysis\n\n"
+                "Longer holds typically favor real estate due to "
+                "compounding appreciation and equity buildup."
+            ),
+            tooltip_title="Holding Period",
+        )
+        holding_tooltip.pack(side="left", padx=(8, 0))
 
         self.holding_period_var = ctk.IntVar(value=10)
         self.holding_period_slider = ctk.CTkSlider(
@@ -280,37 +299,41 @@ class InvestmentSummaryTab(ctk.CTkFrame):
 
         # Depreciation checkbox
         self.depreciation_var = ctk.BooleanVar(value=False)
-        self.depreciation_check = ctk.CTkCheckBox(
+        self.depreciation_check = LabeledCheckBox(
             self.input_frame,
             text="Include depreciation (27.5-year schedule)",
             variable=self.depreciation_var,
+            tooltip=(
+                "Include depreciation tax benefits in your analysis.\n\n"
+                "Residential rental properties can be depreciated over "
+                "27.5 years, reducing taxable rental income.\n\n"
+                "• Deduction = Building Value / 27.5 per year\n"
+                "• Only the building depreciates, not land\n"
+                "• Tax savings = Deduction x Your Tax Rate\n\n"
+                "Note: Depreciation is 'recaptured' at 25% when you sell."
+            ),
+            tooltip_title="Depreciation",
         )
         self.depreciation_check.pack(anchor="w", pady=(5, 0))
 
-        self.depreciation_info = ctk.CTkLabel(
-            self.input_frame,
-            text="Reduces taxable income from rental profits",
-            font=ctk.CTkFont(size=10),
-            text_color="gray"
-        )
-        self.depreciation_info.pack(anchor="w", padx=(25, 0), pady=(0, 5))
-
         # QBI checkbox
         self.qbi_var = ctk.BooleanVar(value=False)
-        self.qbi_check = ctk.CTkCheckBox(
+        self.qbi_check = LabeledCheckBox(
             self.input_frame,
             text="Include QBI deduction (20%)",
             variable=self.qbi_var,
+            tooltip=(
+                "Include the Qualified Business Income (QBI) deduction.\n\n"
+                "The QBI deduction allows rental property owners to deduct "
+                "up to 20% of qualified rental income.\n\n"
+                "• Reduces taxable income by 20% of net rental profit\n"
+                "• Subject to income limits and other restrictions\n"
+                "• Consult a tax professional for eligibility\n\n"
+                "Tax savings = 20% x Net Rental Income x Your Tax Rate"
+            ),
+            tooltip_title="QBI Deduction",
         )
-        self.qbi_check.pack(anchor="w", pady=(5, 0))
-
-        self.qbi_info = ctk.CTkLabel(
-            self.input_frame,
-            text="Qualified Business Income deduction for rentals",
-            font=ctk.CTkFont(size=10),
-            text_color="gray"
-        )
-        self.qbi_info.pack(anchor="w", padx=(25, 0), pady=(0, 10))
+        self.qbi_check.pack(anchor="w", pady=(5, 10))
 
         # Capital Gains Tax Section (only for existing property mode)
         self.tax_section_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
@@ -389,20 +412,21 @@ class InvestmentSummaryTab(ctk.CTkFrame):
 
         # Was rental checkbox
         self.was_rental_var = ctk.BooleanVar(value=False)
-        self.was_rental_checkbox = ctk.CTkCheckBox(
+        self.was_rental_checkbox = LabeledCheckBox(
             self.tax_section_frame,
             text="This was a rental property",
             variable=self.was_rental_var,
+            tooltip=(
+                "Check if you used this property as a rental.\n\n"
+                "When selling a rental property, you must pay depreciation "
+                "recapture tax at 25% on the depreciation you claimed.\n\n"
+                "• Recapture = Years Owned x Annual Depreciation\n"
+                "• Tax = Recapture Amount x 25%\n\n"
+                "This is in addition to capital gains tax on any profit."
+            ),
+            tooltip_title="Rental Property",
         )
-        self.was_rental_checkbox.pack(anchor="w", pady=(5, 0))
-
-        self.rental_info_label = ctk.CTkLabel(
-            self.tax_section_frame,
-            text="(Adds 25% depreciation recapture tax)",
-            font=ctk.CTkFont(size=10),
-            text_color="gray"
-        )
-        self.rental_info_label.pack(anchor="w", padx=(25, 0), pady=(0, 10))
+        self.was_rental_checkbox.pack(anchor="w", pady=(5, 10))
 
         # Investment Comparison Section
         self._create_section_header("Compare To")
@@ -411,25 +435,8 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             self.input_frame,
             "S&P 500 Nominal (%):",
             "10.0",
-            tooltip=(
-                "Expected annual return for alternative investment "
-                "(S&P 500 index fund).\n\n"
-                "• 10% is the historical average nominal return\n"
-                "• ~7% after adjusting for inflation\n\n"
-                "Used to compare: would your money grow faster "
-                "in the stock market or in this property?"
-            ),
-            tooltip_title="Alternative Investment Return",
         )
         self.alternative_return_entry.pack(fill="x", pady=5)
-
-        alt_note = ctk.CTkLabel(
-            self.input_frame,
-            text="(~10% nominal / ~7% after inflation)",
-            font=ctk.CTkFont(size=10),
-            text_color="gray"
-        )
-        alt_note.pack(anchor="w", padx=(190, 0))
 
         # Info button for comparison methodology
         info_btn = ctk.CTkButton(
@@ -461,31 +468,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             tooltip_title="Initial Cash Reserves",
         )
         self.initial_reserves_entry.pack(fill="x", pady=5)
-
-        # Hero Metrics Display
-        self._create_section_header("Investment Grade")
-
-        self.grade_frame = ctk.CTkFrame(self.input_frame, fg_color="#1a1a2e")
-        self.grade_frame.pack(fill="x", pady=10)
-
-        self.grade_label = ctk.CTkLabel(
-            self.grade_frame,
-            text="--",
-            font=ctk.CTkFont(size=36, weight="bold"),
-            text_color="#f39c12"
-        )
-        self.grade_label.pack(pady=(15, 5))
-
-        self.grade_desc_label = ctk.CTkLabel(
-            self.grade_frame,
-            text="Run calculation to see grade",
-            font=ctk.CTkFont(size=11),
-            text_color="gray",
-            wraplength=280,
-            justify="center"
-        )
-        self.grade_desc_label.pack(pady=(0, 15), padx=10)
-
 
     def _create_section_header(self, text: str):
         """Create a section header label."""
@@ -644,6 +626,23 @@ class InvestmentSummaryTab(ctk.CTkFrame):
         )
         self.plot_menu.pack(side="left", padx=10)
 
+        plot_tooltip = TooltipButton(
+            select_frame,
+            tooltip=(
+                "New Purchase mode charts:\n"
+                "• Property vs S&P 500: Compare returns to stocks\n"
+                "• Profit Over Time: Track cumulative profit\n"
+                "• Annual Cash Flow: Year-by-year cash flow\n"
+                "• Equity Growth: Equity vs loan balance\n\n"
+                "Existing Property mode charts:\n"
+                "• Sell Now vs Hold: Compare selling now vs holding\n"
+                "• Profit Over Time: Future profit if you keep it\n"
+                "• Holding Period Analysis: Optimal time to sell"
+            ),
+            tooltip_title="Chart Options",
+        )
+        plot_tooltip.pack(side="left", padx=(0, 10))
+
         # Canvas frame for matplotlib
         self.canvas_frame = ctk.CTkFrame(self.plot_frame)
         self.canvas_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
@@ -737,8 +736,6 @@ class InvestmentSummaryTab(ctk.CTkFrame):
     def calculate(self):
         """Calculate the investment summary and update displays."""
         if self._property_value <= 0:
-            self.grade_label.configure(text="--")
-            self.grade_desc_label.configure(text="No data")
             return
 
         try:
@@ -771,31 +768,9 @@ class InvestmentSummaryTab(ctk.CTkFrame):
             else:
                 self.sell_now_analysis = None
 
-            self._update_grade()
             self._update_plot()
         except ValueError:
             pass
-
-    def _update_grade(self):
-        """Update the investment grade display."""
-        if self.summary is None:
-            return
-
-        grade = self.summary.grade
-        grade_letter = grade.split(" - ")[0]
-
-        # Color based on grade
-        color_map = {
-            "A": "#27ae60",  # Green
-            "B": "#2ecc71",  # Light green
-            "C": "#f39c12",  # Orange
-            "D": "#e67e22",  # Dark orange
-            "F": "#e74c3c",  # Red
-        }
-        color = color_map.get(grade_letter, "#f39c12")
-
-        self.grade_label.configure(text=grade_letter, text_color=color)
-        self.grade_desc_label.configure(text=self.summary.grade_rationale)
 
     def _update_plot(self, *args):
         """Update the displayed plot based on selection."""

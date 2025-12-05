@@ -372,8 +372,6 @@ def plot_holding_period_analysis(params: InvestmentParameters) -> Figure:
     Optimized to generate projections once for max years and extract subsets,
     rather than regenerating the full simulation 30 times.
     """
-    import numpy as np
-
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     fig.patch.set_facecolor("#1a1a2e")
 

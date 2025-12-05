@@ -102,26 +102,3 @@ LOAN_PAYOFF_TOLERANCE = 0.01  # $0.01
 # Tolerance for LTV comparisons
 LTV_COMPARISON_TOLERANCE = 0.0001  # 0.01%
 
-# =============================================================================
-# GRADING THRESHOLDS
-# =============================================================================
-
-# IRR spread vs alternative investment (for investment grading)
-GRADE_IRR_EXCELLENT_SPREAD = 0.05  # 5%+ above benchmark
-GRADE_IRR_GOOD_SPREAD = 0.02  # 2-5% above benchmark
-GRADE_IRR_FAIR_SPREAD = 0.00  # 0-2% above benchmark
-GRADE_IRR_POOR_SPREAD = -0.02  # 0-2% below benchmark
-GRADE_IRR_AVOID_SPREAD = -0.05  # 2-5% below benchmark
-
-# Equity multiple thresholds (for investment grading)
-GRADE_EQUITY_MULTIPLE_EXCELLENT = 3.0
-GRADE_EQUITY_MULTIPLE_GOOD = 2.0
-GRADE_EQUITY_MULTIPLE_FAIR = 1.5
-GRADE_EQUITY_MULTIPLE_POOR = 1.2
-GRADE_EQUITY_MULTIPLE_BREAK_EVEN = 1.0
-
-# Score thresholds for letter grades
-GRADE_A_THRESHOLD = 85
-GRADE_B_THRESHOLD = 70
-GRADE_C_THRESHOLD = 50
-GRADE_D_THRESHOLD = 30
