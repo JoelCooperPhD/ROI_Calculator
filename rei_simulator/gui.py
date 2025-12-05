@@ -623,7 +623,9 @@ class AmortizationTab(ctk.CTkFrame):
         """Calculate the amortization schedule and update displays."""
         try:
             params = self.get_loan_params()
-            self.schedule = generate_amortization_schedule(params)
+            # Use holding period to extend schedule if longer than loan term
+            analysis_years = getattr(self, '_holding_period_years', None)
+            self.schedule = generate_amortization_schedule(params, analysis_years=analysis_years)
             self._update_plot()
         except ValueError:
             pass

@@ -158,9 +158,15 @@ def calculate_periodic_payment(principal: float, periodic_rate: float,
     return principal * (numerator / denominator)
 
 
-def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedule:
+def generate_amortization_schedule(params: LoanParameters, analysis_years: int = None) -> AmortizationSchedule:
     """
     Generate a complete amortization schedule for the loan.
+
+    Args:
+        params: Loan parameters
+        analysis_years: Override schedule length (use max of this and loan term).
+                       If None, uses loan term. Useful for extending schedule
+                       to match holding period.
 
     Returns a DataFrame with columns for each period:
     - period: Payment period number
@@ -183,6 +189,12 @@ def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedu
     """
     # Calculate periodic amounts for escrow items
     periods_per_year = params.periods_per_year
+
+    # Determine total periods - use max of loan term and analysis period
+    if analysis_years is not None:
+        total_periods = max(params.total_periods, analysis_years * periods_per_year)
+    else:
+        total_periods = params.total_periods
     tax_periodic = (params.property_tax_rate * params.property_value / periods_per_year) if params.property_value > 0 else 0
     insurance_periodic = params.insurance_annual / periods_per_year
     hoa_periodic = params.hoa_monthly * (12 / periods_per_year)
@@ -192,8 +204,8 @@ def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedu
 
     # Handle cash purchase (no loan) - generate costs-only schedule
     if params.principal <= 0:
-        # Generate schedule showing just taxes, insurance, HOA over the loan term period
-        for period in range(1, params.total_periods + 1):
+        # Generate schedule showing just taxes, insurance, HOA over the analysis period
+        for period in range(1, total_periods + 1):
             months_from_start = period * (12 / periods_per_year)
             total_monthly_cost = tax_periodic + insurance_periodic + hoa_periodic
 
@@ -233,7 +245,7 @@ def generate_amortization_schedule(params: LoanParameters) -> AmortizationSchedu
     cumulative_principal = 0.0
     loan_paid_off = False
 
-    for period in range(1, params.total_periods + 1):
+    for period in range(1, total_periods + 1):
         # Months from start (for plotting)
         months_from_start = period * (12 / periods_per_year)
 
