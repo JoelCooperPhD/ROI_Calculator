@@ -113,15 +113,16 @@ def safe_positive_float(value: str | None, default: float = 0.0,
 
 
 def safe_positive_int(value: str | None, default: int = 0,
-                      max_val: int | None = None) -> int:
+                      min_val: int = 0, max_val: int | None = None) -> int:
     """Safely parse a string to a non-negative int.
 
     Args:
         value: The string value to parse
         default: Default value if parsing fails (must be >= 0)
+        min_val: Minimum allowed value (defaults to 0)
         max_val: Optional maximum allowed value
 
     Returns:
-        Parsed int value, guaranteed to be >= 0
+        Parsed int value, guaranteed to be >= min_val
     """
-    return safe_int(value, default, min_val=0, max_val=max_val)
+    return safe_int(value, default, min_val=min_val, max_val=max_val)

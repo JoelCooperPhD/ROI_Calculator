@@ -1,11 +1,11 @@
 """Entry point for the Real Estate Investment Simulator."""
 
-from .gui import run_app
+from .app import run
 
 
 def main():
     """Main entry point."""
-    run_app()
+    run()
 
 
 if __name__ == "__main__":

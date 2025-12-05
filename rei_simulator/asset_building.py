@@ -14,6 +14,7 @@ import pandas as pd
 from .constants import (
     DEPRECIATION_YEARS_RESIDENTIAL,
     BUILDING_VALUE_RATIO,
+    QBI_DEDUCTION_RATE,
 )
 from .formulas import calculate_periodic_payment
 
@@ -120,6 +121,7 @@ class AssetBuildingParameters:
     # Tax benefits (simplified)
     marginal_tax_rate: float = 0.0  # For mortgage interest deduction
     depreciation_enabled: bool = False  # 27.5 year depreciation for rentals
+    qbi_deduction_enabled: bool = False  # Section 199A 20% QBI deduction
 
     # Analysis mode
     is_existing_property: bool = False  # True if analyzing existing property vs new purchase
@@ -430,6 +432,9 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
         # Tax benefits
         "interest_deduction": 0,
         "depreciation_benefit": 0,
+        "taxable_rental_income": 0,
+        "qbi_deduction": 0,
+        "qbi_tax_benefit": 0,
         "total_tax_benefit": 0,
         # Cash flow (year 0 has no cash flow - it's the starting point)
         "pre_tax_cash_flow": 0,
@@ -501,7 +506,26 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
         # Calculate tax benefits
         mortgage_interest_deduction = interest_paid * params.marginal_tax_rate
         depreciation_benefit = params.annual_depreciation * params.marginal_tax_rate if params.depreciation_enabled else 0
-        total_tax_benefit = mortgage_interest_deduction + depreciation_benefit
+
+        # Calculate QBI (Section 199A) - taxable rental income for the year
+        # This is Schedule E net income: rent minus all deductible expenses
+        taxable_rental_income = (
+            rental_income          # Effective rent - management
+            - operating_costs      # Property tax, insurance, HOA, maintenance, utilities
+            - interest_paid        # Mortgage interest (not principal)
+        )
+        if params.depreciation_enabled:
+            taxable_rental_income -= params.annual_depreciation
+
+        # QBI deduction is 20% of positive taxable rental income
+        if params.qbi_deduction_enabled and taxable_rental_income > 0:
+            qbi_deduction = taxable_rental_income * QBI_DEDUCTION_RATE
+            qbi_tax_benefit = qbi_deduction * params.marginal_tax_rate
+        else:
+            qbi_deduction = 0.0
+            qbi_tax_benefit = 0.0
+
+        total_tax_benefit = mortgage_interest_deduction + depreciation_benefit + qbi_tax_benefit
 
         # Calculate cash flow (management_cost already subtracted in rental_income)
         gross_income = rental_income
@@ -552,6 +576,9 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
             # Tax benefits
             "interest_deduction": mortgage_interest_deduction,
             "depreciation_benefit": depreciation_benefit,
+            "taxable_rental_income": taxable_rental_income,
+            "qbi_deduction": qbi_deduction,
+            "qbi_tax_benefit": qbi_tax_benefit,
             "total_tax_benefit": total_tax_benefit,
             # Cash flow
             "pre_tax_cash_flow": pre_tax_cash_flow,

@@ -12,7 +12,6 @@ dependencies = [
     "numpy-financial>=1.0.0",
     "pandas>=2.0.0",
     "matplotlib>=3.7.0",
-    "customtkinter>=5.2.0",
 ]
 
 [project.optional-dependencies]

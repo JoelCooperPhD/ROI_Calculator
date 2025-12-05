@@ -1,43 +1,16 @@
 """Visualization functions for Investment Summary analysis."""
 
 from matplotlib.figure import Figure
-from matplotlib.ticker import FuncFormatter
+
 from .investment_summary import (
     InvestmentSummary,
-    InvestmentParameters,
-    generate_investment_summary,
     SellNowVsHoldAnalysis,
 )
-
-
-# Color palette
-COLORS = {
-    "primary": "#3498db",
-    "secondary": "#2ecc71",
-    "accent": "#e74c3c",
-    "warning": "#f39c12",
-    "neutral": "#95a5a6",
-    "dark": "#2c3e50",
-    "light": "#ecf0f1",
-    "profit": "#27ae60",
-    "loss": "#c0392b",
-    "cash_flow": "#9b59b6",
-    "equity": "#1abc9c",
-    "alternative": "#e67e22",
-}
-
-
-def _setup_dark_style(fig: Figure, ax):
-    """Apply dark theme styling to plot."""
-    fig.patch.set_facecolor("#1a1a2e")
-    ax.set_facecolor("#16213e")
-    ax.tick_params(colors="white")
-    ax.xaxis.label.set_color("white")
-    ax.yaxis.label.set_color("white")
-    ax.title.set_color("white")
-    for spine in ax.spines.values():
-        spine.set_color("#404040")
-    ax.grid(True, alpha=0.2, color="white")
+from .plot_common import (
+    COLORS,
+    CURRENCY_FORMATTER,
+    setup_dark_style,
+)
 
 
 def plot_investment_comparison(summary: InvestmentSummary) -> Figure:
@@ -50,7 +23,7 @@ def plot_investment_comparison(summary: InvestmentSummary) -> Figure:
     """
     fig = Figure(figsize=(12, 6))
     ax = fig.add_subplot(111)
-    _setup_dark_style(fig, ax)
+    setup_dark_style(fig, ax)
 
     years = [0] + [p.year for p in summary.yearly_projections]
     initial = summary.params.total_initial_investment
@@ -96,84 +69,13 @@ def plot_investment_comparison(summary: InvestmentSummary) -> Figure:
             f"Initial Investment: ${initial:,.0f}",
             transform=ax.transAxes, fontsize=10, color="white",
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="#2c3e50", alpha=0.8))
+            bbox=dict(boxstyle="round", facecolor=COLORS["total_bar"], alpha=0.8))
 
     ax.set_xlabel("Year", fontsize=12)
     ax.set_ylabel("Total Value ($)", fontsize=12)
     ax.set_title("Property vs S&P 500", fontsize=14, fontweight="bold")
-    ax.legend(loc="lower right", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
-
-    return fig
-
-
-def plot_cash_flow_waterfall(summary: InvestmentSummary) -> Figure:
-    """
-    Waterfall chart showing how profit is built up.
-    """
-    fig = Figure(figsize=(12, 7))
-    ax = fig.add_subplot(111)
-    _setup_dark_style(fig, ax)
-
-    # Define the waterfall components
-    initial_investment = -summary.total_cash_invested
-    total_cash_flow = summary.total_cash_flow_received
-    sale_proceeds = summary.net_sale_proceeds
-    total_profit = summary.total_profit
-
-    categories = [
-        "Initial\nInvestment",
-        "Cumulative\nCash Flow",
-        "Net Sale\nProceeds",
-        "Total\nProfit"
-    ]
-    values = [initial_investment, total_cash_flow, sale_proceeds, total_profit]
-
-    # Calculate waterfall positions
-    cumulative = 0
-    bottoms = []
-    heights = []
-    colors = []
-
-    for i, val in enumerate(values):
-        if i == len(values) - 1:  # Total bar
-            bottoms.append(0)
-            heights.append(val)
-            colors.append(COLORS["profit"] if val >= 0 else COLORS["loss"])
-        else:
-            if val >= 0:
-                bottoms.append(cumulative)
-                heights.append(val)
-                colors.append(COLORS["secondary"])
-            else:
-                bottoms.append(cumulative + val)
-                heights.append(abs(val))
-                colors.append(COLORS["accent"])
-            cumulative += val
-
-    # Plot bars
-    bars = ax.bar(categories, heights, bottom=bottoms, color=colors, edgecolor="white", linewidth=1)
-
-    # Add connector lines between bars
-    for i in range(len(categories) - 2):
-        x1, x2 = i + 0.4, i + 0.6
-        y = bottoms[i] + heights[i] if values[i] >= 0 else bottoms[i]
-        ax.plot([x1, x2], [y, y], color="white", linestyle="--", alpha=0.5)
-
-    # Add value labels
-    for i, (bar, val) in enumerate(zip(bars, values)):
-        height = bar.get_height()
-        y_pos = bar.get_y() + height / 2
-        label = f"${abs(val):,.0f}"
-        if val < 0:
-            label = f"-{label}"
-        ax.text(bar.get_x() + bar.get_width() / 2, y_pos, label,
-                ha="center", va="center", color="white", fontsize=11, fontweight="bold")
-
-    ax.axhline(y=0, color="white", linewidth=0.5)
-    ax.set_ylabel("Amount ($)", fontsize=12)
-    ax.set_title("Profit Waterfall", fontsize=14, fontweight="bold")
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+    ax.legend(loc="lower right", facecolor=COLORS["total_bar"], edgecolor="white", labelcolor="white")
+    ax.yaxis.set_major_formatter(CURRENCY_FORMATTER)
 
     return fig
 
@@ -184,7 +86,7 @@ def plot_equity_vs_loan(summary: InvestmentSummary) -> Figure:
     """
     fig = Figure(figsize=(12, 6))
     ax = fig.add_subplot(111)
-    _setup_dark_style(fig, ax)
+    setup_dark_style(fig, ax)
 
     years = [p.year for p in summary.yearly_projections]
     equity = [p.equity for p in summary.yearly_projections]
@@ -205,113 +107,8 @@ def plot_equity_vs_loan(summary: InvestmentSummary) -> Figure:
     ax.set_xlabel("Year", fontsize=12)
     ax.set_ylabel("Value ($)", fontsize=12)
     ax.set_title("Equity Growth Over Time", fontsize=14, fontweight="bold")
-    ax.legend(loc="upper left", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
-
-    return fig
-
-
-def plot_annual_cash_flow(summary: InvestmentSummary) -> Figure:
-    """
-    Bar chart of annual net cash flow.
-    """
-    fig = Figure(figsize=(12, 6))
-    ax = fig.add_subplot(111)
-    _setup_dark_style(fig, ax)
-
-    years = [p.year for p in summary.yearly_projections]
-    cash_flows = [p.net_cash_flow for p in summary.yearly_projections]
-
-    colors = [COLORS["profit"] if cf >= 0 else COLORS["loss"] for cf in cash_flows]
-
-    bars = ax.bar(years, cash_flows, color=colors, edgecolor="white", linewidth=0.5)
-
-    # Add value labels
-    for bar, cf in zip(bars, cash_flows):
-        height = bar.get_height()
-        y_pos = height + (500 if height >= 0 else -500)
-        ax.text(bar.get_x() + bar.get_width() / 2, y_pos,
-                f"${cf:,.0f}", ha="center", va="bottom" if height >= 0 else "top",
-                color="white", fontsize=8)
-
-    ax.axhline(y=0, color="white", linewidth=0.5)
-    ax.set_xlabel("Year", fontsize=12)
-    ax.set_ylabel("Net Cash Flow ($)", fontsize=12)
-    ax.set_title("Annual Net Cash Flow", fontsize=14, fontweight="bold")
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
-
-    return fig
-
-
-def plot_return_breakdown_pie(summary: InvestmentSummary) -> Figure:
-    """
-    Pie chart showing sources of return.
-    """
-    fig = Figure(figsize=(10, 8))
-    ax = fig.add_subplot(111)
-    fig.patch.set_facecolor("#1a1a2e")
-
-    # Calculate return components
-    final = summary.yearly_projections[-1]
-    params = summary.params
-
-    # Initial down payment is not a "return" - it's getting your money back
-    # Returns come from: appreciation, principal paydown, cash flow
-    appreciation_gain = final.property_value - params.property_value
-    principal_paydown = params.loan_amount - final.loan_balance
-    total_cash_flow = final.cumulative_cash_flow
-
-    # But we need to subtract selling costs from appreciation
-    selling_costs = final.selling_costs
-
-    components = []
-    labels = []
-    colors = []
-
-    if appreciation_gain - selling_costs > 0:
-        components.append(appreciation_gain - selling_costs)
-        labels.append(f"Appreciation\n(net of selling costs)\n${appreciation_gain - selling_costs:,.0f}")
-        colors.append(COLORS["secondary"])
-    elif appreciation_gain - selling_costs < 0:
-        # Treat as cost
-        pass
-
-    if principal_paydown > 0:
-        components.append(principal_paydown)
-        labels.append(f"Principal Paydown\n${principal_paydown:,.0f}")
-        colors.append(COLORS["equity"])
-
-    if total_cash_flow > 0:
-        components.append(total_cash_flow)
-        labels.append(f"Cash Flow\n${total_cash_flow:,.0f}")
-        colors.append(COLORS["cash_flow"])
-    elif total_cash_flow < 0:
-        components.append(abs(total_cash_flow))
-        labels.append(f"Negative Cash Flow\n-${abs(total_cash_flow):,.0f}")
-        colors.append(COLORS["loss"])
-
-    if len(components) == 0:
-        # No positive returns
-        ax.text(0.5, 0.5, "No positive returns to display",
-                ha="center", va="center", color="white", fontsize=14,
-                transform=ax.transAxes)
-    else:
-        wedges, texts, autotexts = ax.pie(
-            components,
-            labels=labels,
-            colors=colors,
-            autopct=lambda pct: f"{pct:.1f}%",
-            startangle=90,
-            explode=[0.02] * len(components),
-            textprops={"color": "white", "fontsize": 10}
-        )
-
-        for autotext in autotexts:
-            autotext.set_color("white")
-            autotext.set_fontweight("bold")
-
-    ax.set_title(f"Return Breakdown\nTotal Profit: ${summary.total_profit:,.0f}",
-                 fontsize=14, fontweight="bold", color="white")
+    ax.legend(loc="upper left", facecolor=COLORS["total_bar"], edgecolor="white", labelcolor="white")
+    ax.yaxis.set_major_formatter(CURRENCY_FORMATTER)
 
     return fig
 
@@ -330,7 +127,7 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
     """
     fig = Figure(figsize=(12, 7))
     ax = fig.add_subplot(111)
-    _setup_dark_style(fig, ax)
+    setup_dark_style(fig, ax)
 
     df = analysis.comparison_df
     years = df["year"].tolist()
@@ -435,7 +232,7 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
     ax.text(0.02, 0.98, analysis.recommendation,
             transform=ax.transAxes, fontsize=12, fontweight="bold",
             verticalalignment="top", color=recommendation_color,
-            bbox=dict(boxstyle="round", facecolor="#2c3e50", edgecolor=recommendation_color))
+            bbox=dict(boxstyle="round", facecolor=COLORS["total_bar"], edgecolor=recommendation_color))
 
     # Add methodology note
     if sell_has_tax and hold_has_tax:
@@ -460,8 +257,8 @@ def plot_sell_now_vs_hold(analysis: SellNowVsHoldAnalysis) -> Figure:
     else:
         title = "Sell Now vs. Continue Holding"
     ax.set_title(title, fontsize=14, fontweight="bold")
-    ax.legend(loc="lower right", facecolor="#2c3e50", edgecolor="white", labelcolor="white")
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+    ax.legend(loc="lower right", facecolor=COLORS["total_bar"], edgecolor="white", labelcolor="white")
+    ax.yaxis.set_major_formatter(CURRENCY_FORMATTER)
 
     # Start y-axis from 0 or just below the minimum value
     all_values = sell_values + hold_values
