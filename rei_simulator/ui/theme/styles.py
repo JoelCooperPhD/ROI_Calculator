@@ -417,22 +417,6 @@ class Theme:
         )
 
     @staticmethod
-    def configure_canvas(widget, use_dark_bg: bool = False) -> None:
-        """Configure a Canvas widget with dark theme colors.
-
-        Args:
-            widget: The canvas widget to configure
-            use_dark_bg: If True, use BG_DARK for consistency with frames.
-                        If False (default for plots), use BG_CANVAS (black).
-        """
-        bg = Colors.BG_DARK if use_dark_bg else Colors.BG_CANVAS
-        widget.configure(
-            bg=bg,
-            highlightthickness=0,
-            borderwidth=0
-        )
-
-    @staticmethod
     def configure_toplevel(widget) -> None:
         """Configure a Toplevel widget with dark theme."""
         widget.configure(bg=Colors.BG_DARK)
@@ -448,25 +432,3 @@ class Theme:
             borderwidth=0,
             relief='flat'
         )
-
-    @staticmethod
-    def get_status_style(status: str) -> str:
-        """Get the appropriate status label style."""
-        style_map = {
-            'ready': 'Status.Ready.TLabel',
-            'warning': 'Status.Warning.TLabel',
-            'success': 'Status.Success.TLabel',
-            'error': 'Status.Error.TLabel',
-        }
-        return style_map.get(status.lower(), 'TLabel')
-
-    @staticmethod
-    def get_status_color(status: str) -> str:
-        """Get the appropriate color for a status."""
-        color_map = {
-            'ready': Colors.STATUS_READY,
-            'warning': Colors.STATUS_WARNING,
-            'success': Colors.STATUS_SUCCESS,
-            'error': Colors.STATUS_ERROR,
-        }
-        return color_map.get(status.lower(), Colors.FG_SECONDARY)

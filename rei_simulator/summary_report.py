@@ -507,9 +507,10 @@ def _generate_new_purchase_report(data: ReportData) -> str:
     management_cost = effective_rent * data.management_rate
     net_rental_income = effective_rent - management_cost
 
-    # Sale analysis
+    # Sale analysis - use configured selling cost percentage
+    selling_cost_pct = inv.params.selling_cost_percent if inv else 0.06
     sale_price = final_property_value
-    selling_costs = sale_price * 0.06  # 6% default
+    selling_costs = sale_price * selling_cost_pct
     net_sale_proceeds = sale_price - selling_costs - final_loan_balance
 
     # Capital gains tax estimates using centralized tax functions
@@ -823,7 +824,7 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                         <td class="text-right">{_format_currency(sale_price)}</td>
                     </tr>
                     <tr>
-                        <td>Selling Costs (6%)</td>
+                        <td>Selling Costs ({selling_cost_pct*100:.1f}%)</td>
                         <td class="text-right">-{_format_currency(selling_costs)}</td>
                     </tr>
                     <tr>
@@ -1098,7 +1099,8 @@ def _generate_existing_property_report(data: ReportData) -> str:
     management_cost = effective_rent * data.management_rate
     net_rental_income = effective_rent - management_cost
 
-    # Sell now analysis
+    # Sell now analysis - use configured selling cost percentage
+    selling_cost_pct = inv.params.selling_cost_percent if inv else 0.06
     if sell_analysis:
         sell_now_proceeds = sell_analysis.net_proceeds_if_sell_now
         selling_costs_now = sell_analysis.selling_costs_now
@@ -1107,8 +1109,8 @@ def _generate_existing_property_report(data: ReportData) -> str:
         recommendation = sell_analysis.recommendation
         advantage_amount = sell_analysis.advantage_amount
     else:
-        sell_now_proceeds = current_equity - (current_property_value * 0.06)
-        selling_costs_now = current_property_value * 0.06
+        sell_now_proceeds = current_equity - (current_property_value * selling_cost_pct)
+        selling_costs_now = current_property_value * selling_cost_pct
         hold_outcome = final_equity
         sell_now_outcome = sell_now_proceeds * (1.10 ** data.holding_years)
         recommendation = "Hold" if hold_outcome > sell_now_outcome else "Sell"
@@ -1269,7 +1271,7 @@ def _generate_existing_property_report(data: ReportData) -> str:
                         <td class="text-right">{_format_currency(current_property_value)}</td>
                     </tr>
                     <tr>
-                        <td>Selling Costs (6%)</td>
+                        <td>Selling Costs ({selling_cost_pct*100:.1f}%)</td>
                         <td class="text-right">-{_format_currency(selling_costs_now)}</td>
                     </tr>
                     <tr>

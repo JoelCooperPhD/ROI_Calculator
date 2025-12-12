@@ -24,25 +24,6 @@ from .constants import (
 # DEPRECIATION CALCULATIONS
 # =============================================================================
 
-def calculate_building_value(property_value: float, building_ratio: float = BUILDING_VALUE_RATIO) -> float:
-    """
-    Calculate the building value for depreciation purposes.
-
-    The IRS requires separating land value (not depreciable) from building value.
-
-    Args:
-        property_value: Total property value (land + building)
-        building_ratio: Ratio of value attributable to building (default 80%)
-
-    Returns:
-        Building value for depreciation basis
-
-    Formula:
-        building_value = property_value × building_ratio
-    """
-    return property_value * building_ratio
-
-
 def calculate_annual_depreciation(
     building_value: float,
     depreciation_years: float = DEPRECIATION_YEARS_RESIDENTIAL,
@@ -212,78 +193,6 @@ def calculate_qbi_tax_benefit(
         tax_benefit = qbi_deduction × marginal_tax_rate
     """
     return qbi_deduction * marginal_tax_rate
-
-
-@dataclass
-class AnnualTaxBenefits:
-    """Summary of annual tax benefits from rental property ownership."""
-    mortgage_interest_deduction: float
-    depreciation_benefit: float
-    taxable_rental_income: float
-    qbi_deduction: float
-    qbi_tax_benefit: float
-    total_tax_benefit: float
-
-
-def calculate_annual_tax_benefits(
-    interest_paid: float,
-    net_rental_income: float,
-    operating_costs: float,
-    marginal_tax_rate: float,
-    depreciation_enabled: bool = False,
-    annual_depreciation: float = 0.0,
-    qbi_enabled: bool = False,
-) -> AnnualTaxBenefits:
-    """
-    Calculate all annual tax benefits for a rental property.
-
-    Args:
-        interest_paid: Mortgage interest paid this year
-        net_rental_income: Effective rent minus management fees
-        operating_costs: Property tax, insurance, HOA, maintenance, utilities
-        marginal_tax_rate: Taxpayer's marginal tax rate
-        depreciation_enabled: Whether to claim depreciation
-        annual_depreciation: Annual depreciation amount (if enabled)
-        qbi_enabled: Whether to claim QBI deduction
-
-    Returns:
-        AnnualTaxBenefits with complete breakdown
-    """
-    # Mortgage interest deduction
-    interest_deduction = calculate_mortgage_interest_deduction(interest_paid, marginal_tax_rate)
-
-    # Depreciation benefit
-    if depreciation_enabled:
-        depreciation_benefit = calculate_depreciation_tax_benefit(annual_depreciation, marginal_tax_rate)
-        depreciation_for_income = annual_depreciation
-    else:
-        depreciation_benefit = 0.0
-        depreciation_for_income = 0.0
-
-    # Taxable rental income (for QBI calculation)
-    taxable_income = calculate_taxable_rental_income(
-        net_rental_income, operating_costs, interest_paid, depreciation_for_income
-    )
-
-    # QBI deduction
-    if qbi_enabled:
-        qbi_deduction = calculate_qbi_deduction(taxable_income)
-        qbi_benefit = calculate_qbi_tax_benefit(qbi_deduction, marginal_tax_rate)
-    else:
-        qbi_deduction = 0.0
-        qbi_benefit = 0.0
-
-    # Total tax benefit
-    total_benefit = interest_deduction + depreciation_benefit + qbi_benefit
-
-    return AnnualTaxBenefits(
-        mortgage_interest_deduction=interest_deduction,
-        depreciation_benefit=depreciation_benefit,
-        taxable_rental_income=taxable_income,
-        qbi_deduction=qbi_deduction,
-        qbi_tax_benefit=qbi_benefit,
-        total_tax_benefit=total_benefit,
-    )
 
 
 # =============================================================================

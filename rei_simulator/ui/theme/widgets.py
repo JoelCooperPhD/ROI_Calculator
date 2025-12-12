@@ -215,8 +215,8 @@ class ScrollableFrame(ttk.Frame):
             command=self.canvas.yview
         )
 
-        # Create inner frame that will hold the content
-        self.inner_frame = ttk.Frame(self.canvas)
+        # Create inner frame that will hold the content (explicit padding=0 for consistency)
+        self.inner_frame = ttk.Frame(self.canvas, padding=0)
 
         # Configure canvas scrolling
         self.canvas.configure(yscrollcommand=self.scrollbar.set)

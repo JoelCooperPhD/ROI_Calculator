@@ -23,7 +23,7 @@ from .constants import (
 from .formulas import calculate_periodic_payment
 from .metrics import calculate_irr
 from .comparison import generate_alternative_comparison
-from .tax import calculate_sale_tax as _calculate_sale_tax, SaleTaxEstimate
+from .tax import calculate_sale_tax, SaleTaxEstimate
 from .cost_growth import (
     CostGrowthConfig,
     YearlyCostBreakdown,
@@ -564,41 +564,6 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         total_tax_benefits=final.cumulative_tax_benefits,
         compounded_cash_flow=cash_flow_pool,  # Now only actual cash flows, not tax benefits
         net_sale_proceeds=final.net_sale_proceeds,
-    )
-
-
-# SaleTaxEstimate is imported from tax.py for backward compatibility
-# New code should import directly from rei_simulator.tax
-
-def calculate_sale_tax(
-    sale_price: float,
-    original_purchase_price: float,
-    capital_improvements: float,
-    years_owned: int,
-    building_value: float,
-    was_rental: bool,
-    cap_gains_rate: float,
-    selling_costs: float,
-    loan_balance: float,
-    depreciation_recapture_rate: float = 0.25,
-) -> SaleTaxEstimate:
-    """
-    Calculate capital gains tax estimate for a property sale.
-
-    Note: This is a wrapper for backward compatibility.
-    New code should import calculate_sale_tax from rei_simulator.tax directly.
-    """
-    return _calculate_sale_tax(
-        sale_price=sale_price,
-        original_purchase_price=original_purchase_price,
-        capital_improvements=capital_improvements,
-        years_owned=years_owned,
-        building_value=building_value,
-        was_rental=was_rental,
-        capital_gains_rate=cap_gains_rate,
-        selling_costs=selling_costs,
-        loan_balance=loan_balance,
-        depreciation_recapture_rate=depreciation_recapture_rate,
     )
 
 

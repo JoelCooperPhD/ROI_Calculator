@@ -1,5 +1,6 @@
 """Configuration persistence with async save."""
 
+import atexit
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
@@ -11,6 +12,7 @@ CONFIG_DIR = Path.home() / ".rei-simulator"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 _executor = ThreadPoolExecutor(max_workers=1)
+atexit.register(_executor.shutdown, wait=False)
 
 
 def load_config() -> AppConfig:

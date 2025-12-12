@@ -3,8 +3,7 @@
 import tkinter as tk
 from tkinter import ttk
 
-from .tooltip import Tooltip, TooltipButton
-from ...tooltip_data import get_tooltip
+from .tooltip import TooltipButton
 from ..theme import Colors
 
 

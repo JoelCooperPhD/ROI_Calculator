@@ -4,8 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from ..theme import Colors, Theme
-from .tooltip import Tooltip, TooltipButton
-from ...tooltip_data import get_tooltip
+from .tooltip import TooltipButton
 
 
 class LabeledOptionMenu(ttk.Frame):

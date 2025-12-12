@@ -51,13 +51,13 @@ CURRENCY_FORMATTER = plt.FuncFormatter(currency_formatter)
 def create_figure(figsize: tuple[int, int] = (10, 6), dpi: int = 100) -> Figure:
     """Create a matplotlib figure with consistent styling."""
     fig = Figure(figsize=figsize, dpi=dpi)
-    fig.set_facecolor("#2b2b2b")
+    fig.set_facecolor(COLORS["dark_bg"])
     return fig
 
 
 def style_axis(ax, title: str = "", xlabel: str = "", ylabel: str = ""):
     """Apply consistent dark theme styling to an axis."""
-    ax.set_facecolor("#2b2b2b")
+    ax.set_facecolor(COLORS["dark_bg"])
     ax.set_title(title, color="white", fontsize=12, fontweight="bold")
     ax.set_xlabel(xlabel, color="white", fontsize=10)
     ax.set_ylabel(ylabel, color="white", fontsize=10)
@@ -71,8 +71,8 @@ def style_axis(ax, title: str = "", xlabel: str = "", ylabel: str = ""):
 
 def setup_dark_style(fig, ax):
     """Apply dark theme styling to figure and axis."""
-    fig.set_facecolor("#2b2b2b")
-    ax.set_facecolor("#2b2b2b")
+    fig.set_facecolor(COLORS["dark_bg"])
+    ax.set_facecolor(COLORS["dark_bg"])
     ax.tick_params(colors="white")
     ax.spines["bottom"].set_color("white")
     ax.spines["top"].set_color("white")

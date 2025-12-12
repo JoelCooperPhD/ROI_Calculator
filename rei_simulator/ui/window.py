@@ -7,7 +7,7 @@ import time
 from ..config import AppConfig, save_config
 from ..model import DataModel, CalculationEngine
 from .widgets import LabeledEntry, LabeledCheckBox, LabeledOptionMenu, TooltipButton
-from .charts import close_all_figures, embed_figure
+from .charts import close_all_figures, close_figure, embed_figure
 from .theme import Colors, Theme
 from .theme.widgets import RoundedButton, ScrollableFrame, SegmentedButton
 
@@ -70,6 +70,7 @@ class MainWindow(tk.Tk):
             self._canvases = {}
             self._toolbars = {}
             self._canvas_frames = {}
+            self._figures = {}  # Track figures for proper cleanup
 
             # Configure appearance
             with _timer("Configure appearance"):
@@ -1078,6 +1079,13 @@ class MainWindow(tk.Tk):
     # =========================================================================
     def _clear_chart(self, tab_key: str) -> None:
         """Clear chart for a specific tab."""
+        # Close the matplotlib figure first to free memory
+        if tab_key in self._figures and self._figures[tab_key]:
+            try:
+                close_figure(self._figures[tab_key])
+            except Exception:
+                pass
+            self._figures[tab_key] = None
         if tab_key in self._canvases and self._canvases[tab_key]:
             try:
                 self._canvases[tab_key].get_tk_widget().destroy()
@@ -1098,6 +1106,7 @@ class MainWindow(tk.Tk):
             canvas, toolbar = embed_figure(figure, self._canvas_frames[tab_key])
             self._canvases[tab_key] = canvas
             self._toolbars[tab_key] = toolbar
+            self._figures[tab_key] = figure  # Track figure for cleanup
 
     def _render_compare_chart(self) -> None:
         """Render all compare tab charts."""
