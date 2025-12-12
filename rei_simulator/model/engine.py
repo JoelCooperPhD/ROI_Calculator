@@ -183,6 +183,7 @@ class CalculationEngine:
             annual_interest_rate=self.model.interest_rate,
             loan_term_years=self.model.loan_term_years,
             monthly_pi_payment=monthly_pi,
+            analysis_years=self.model.holding_period,
             appreciation_params=appreciation_params,
             rental_params=rental_params,
             property_taxes_annual=self.model.property_tax_annual,
@@ -254,17 +255,17 @@ class CalculationEngine:
 
         # Generate sell now analysis for existing property mode
         if self.model.is_existing_property:
+            current_equity = self.model.property_value - self.model.loan_amount
             sell_now = generate_sell_now_vs_hold_analysis(
-                current_value=self.model.property_value,
-                remaining_loan=self.model.loan_amount,
-                selling_cost_pct=self.model.selling_cost_pct,
+                params=params,
+                current_equity=current_equity,
+                current_property_value=self.model.property_value,
+                analysis_years=self.model.holding_period,
                 original_purchase_price=self.model.original_purchase_price,
                 capital_improvements=self.model.capital_improvements,
                 years_owned=self.model.years_owned,
                 was_rental=self.model.was_rental,
-                marginal_tax_rate=self.model.marginal_tax_rate,
                 cap_gains_rate=self.model.cap_gains_rate,
-                investment_summary=summary,
             )
             self.model.sell_now_analysis = sell_now
         else:

@@ -425,6 +425,45 @@ def _generate_new_purchase_report(data: ReportData) -> str:
     selling_costs = sale_price * 0.06  # 6% default
     net_sale_proceeds = sale_price - selling_costs - final_loan_balance
 
+    # Capital gains tax estimates
+    cap_gains_rate = 0.15  # Long-term capital gains rate
+    depreciation_recapture_rate = 0.25  # IRS rate for depreciation recapture
+
+    # RE capital gains for rental property:
+    # 1. Depreciation recapture taxed at 25%
+    # 2. Remaining gain taxed at 15%
+
+    # Calculate accumulated depreciation (building value / 27.5 years * holding years)
+    building_value = data.purchase_price * 0.80  # ~80% of purchase price is building (not land)
+    annual_depreciation = building_value / 27.5
+    accumulated_depreciation = annual_depreciation * data.holding_years
+
+    # Adjusted cost basis = purchase price - accumulated depreciation
+    adjusted_basis = data.purchase_price - accumulated_depreciation
+
+    # Total gain = sale price - adjusted basis - selling costs
+    total_re_gain = max(0, sale_price - adjusted_basis - selling_costs)
+
+    # Depreciation recapture = lesser of (accumulated depreciation) or (total gain)
+    depreciation_recapture = min(accumulated_depreciation, total_re_gain)
+    depreciation_recapture_tax = depreciation_recapture * depreciation_recapture_rate
+
+    # Remaining gain taxed at regular cap gains rate
+    remaining_gain = max(0, total_re_gain - depreciation_recapture)
+    remaining_gain_tax = remaining_gain * cap_gains_rate
+
+    # Total RE capital gains tax
+    re_cap_gains_tax = depreciation_recapture_tax + remaining_gain_tax
+    re_after_tax_profit = total_profit - re_cap_gains_tax
+
+    # S&P capital gains: tax on all gains at 15%
+    sp_taxable_gain = max(0, alt_profit)
+    sp_cap_gains_tax = sp_taxable_gain * cap_gains_rate
+    sp_after_tax_profit = alt_profit - sp_cap_gains_tax
+
+    # After-tax comparison
+    after_tax_outperformance = re_after_tax_profit - sp_after_tax_profit
+
     # Equity breakdown
     principal_paid = amort.total_principal_paid if amort else 0
 
@@ -432,7 +471,6 @@ def _generate_new_purchase_report(data: ReportData) -> str:
     rental_section = ""
     if data.monthly_rent > 0:
         annual_mortgage = monthly_pi * 12
-        total_expenses = annual_mortgage + year1_operating
         rental_section = f"""
         <div class="section">
             <h2>Rental Income & Cash Flow (Year 1)</h2>
@@ -457,14 +495,8 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                     <tr>
                         <td>Effective Rent</td>
                         <td class="text-right">{_format_currency(effective_rent)}</td>
-                        <td>Total Expenses</td>
-                        <td class="text-right">-{_format_currency(total_expenses)}</td>
-                    </tr>
-                    <tr>
                         <td>Management ({data.management_rate*100:.0f}%)</td>
                         <td class="text-right">-{_format_currency(management_cost)}</td>
-                        <td></td>
-                        <td></td>
                     </tr>
                     <tr class="highlight">
                         <td><strong>Net Rental Income</strong></td>
@@ -512,17 +544,17 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                     <div class="metric-label">Total Profit</div>
                     <div class="metric-value">{_format_currency(total_profit)}</div>
                 </div>
-                <div class="metric {'success' if irr > 8 else 'warning' if irr > 0 else 'danger'}">
+                <div class="metric {'success' if irr > 0.08 else 'warning' if irr > 0 else 'danger'}">
                     <div class="metric-label">Internal Rate of Return</div>
-                    <div class="metric-value">{irr:.1f}%</div>
+                    <div class="metric-value">{irr * 100:.1f}%</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Total ROI</div>
-                    <div class="metric-value">{total_roi:.1f}%</div>
+                    <div class="metric-value">{total_roi * 100:.1f}%</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Annualized ROI</div>
-                    <div class="metric-value">{annualized_roi:.1f}%</div>
+                    <div class="metric-value">{annualized_roi * 100:.1f}%</div>
                 </div>
             </div>
         </div>
@@ -704,6 +736,8 @@ def _generate_new_purchase_report(data: ReportData) -> str:
             <p style="color: var(--gray-600); margin-bottom: 1rem; font-size: 0.9rem;">
                 Comparing this investment to deploying the same capital in the S&P 500 (10% avg annual return)
             </p>
+
+            <h3 style="margin-bottom: 0.75rem; font-size: 1rem; color: var(--gray-700);">Pre-Tax Comparison</h3>
             <div class="comparison">
                 <div class="comparison-item real-estate">
                     <div class="comparison-label">Real Estate Profit</div>
@@ -714,12 +748,47 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                     <div class="comparison-value" style="color: var(--success);">{_format_currency(alt_profit)}</div>
                 </div>
             </div>
-            <div class="winner">
+            <div class="winner" style="margin-bottom: 1.5rem;">
                 <div class="winner-label">{'Real Estate Outperforms By' if outperformance > 0 else 'Stocks Outperform By'}</div>
                 <div class="winner-value" style="{'color: var(--success)' if outperformance > 0 else 'color: var(--danger)'}">
                     {_format_currency(abs(outperformance))}
                 </div>
             </div>
+
+            <h3 style="margin-bottom: 0.75rem; font-size: 1rem; color: var(--gray-700);">After-Tax Comparison (Est. 15% Cap Gains)</h3>
+            <div class="table-container" style="margin-bottom: 1rem;">
+                <table>
+                    <tr>
+                        <th></th>
+                        <th class="text-right">Real Estate</th>
+                        <th class="text-right">S&P 500</th>
+                    </tr>
+                    <tr>
+                        <td>Pre-Tax Profit</td>
+                        <td class="text-right">{_format_currency(total_profit)}</td>
+                        <td class="text-right">{_format_currency(alt_profit)}</td>
+                    </tr>
+                    <tr>
+                        <td>Est. Capital Gains Tax</td>
+                        <td class="text-right">-{_format_currency(re_cap_gains_tax)}</td>
+                        <td class="text-right">-{_format_currency(sp_cap_gains_tax)}</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td><strong>After-Tax Profit</strong></td>
+                        <td class="text-right"><strong>{_format_currency(re_after_tax_profit)}</strong></td>
+                        <td class="text-right"><strong>{_format_currency(sp_after_tax_profit)}</strong></td>
+                    </tr>
+                </table>
+            </div>
+            <div class="winner">
+                <div class="winner-label">{'Real Estate Outperforms By (After Tax)' if after_tax_outperformance > 0 else 'Stocks Outperform By (After Tax)'}</div>
+                <div class="winner-value" style="{'color: var(--success)' if after_tax_outperformance > 0 else 'color: var(--danger)'}">
+                    {_format_currency(abs(after_tax_outperformance))}
+                </div>
+            </div>
+            <p style="color: var(--gray-500); font-size: 0.8rem; margin-top: 0.75rem; font-style: italic;">
+                RE tax includes depreciation recapture at 25% ({_format_currency(accumulated_depreciation)} over {data.holding_years} yrs) + 15% on remaining gain.
+            </p>
         </div>
 
         <!-- Loan Summary -->
@@ -844,7 +913,6 @@ def _generate_existing_property_report(data: ReportData) -> str:
     rental_section = ""
     if data.monthly_rent > 0:
         annual_mortgage = monthly_pi * 12
-        total_expenses = annual_mortgage + year1_operating
         rental_section = f"""
         <div class="section">
             <h2>Rental Income & Cash Flow (Year 1)</h2>
@@ -869,14 +937,8 @@ def _generate_existing_property_report(data: ReportData) -> str:
                     <tr>
                         <td>Effective Rent</td>
                         <td class="text-right">{_format_currency(effective_rent)}</td>
-                        <td>Total Expenses</td>
-                        <td class="text-right">-{_format_currency(total_expenses)}</td>
-                    </tr>
-                    <tr>
                         <td>Management ({data.management_rate*100:.0f}%)</td>
                         <td class="text-right">-{_format_currency(management_cost)}</td>
-                        <td></td>
-                        <td></td>
                     </tr>
                     <tr class="highlight">
                         <td><strong>Net Rental Income</strong></td>
@@ -1003,17 +1065,17 @@ def _generate_existing_property_report(data: ReportData) -> str:
                     <div class="metric-label">Projected Profit (Hold)</div>
                     <div class="metric-value">{_format_currency(total_profit)}</div>
                 </div>
-                <div class="metric {'success' if irr > 8 else 'warning' if irr > 0 else 'danger'}">
+                <div class="metric {'success' if irr > 0.08 else 'warning' if irr > 0 else 'danger'}">
                     <div class="metric-label">Projected IRR</div>
-                    <div class="metric-value">{irr:.1f}%</div>
+                    <div class="metric-value">{irr * 100:.1f}%</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Total ROI</div>
-                    <div class="metric-value">{total_roi:.1f}%</div>
+                    <div class="metric-value">{total_roi * 100:.1f}%</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Annualized ROI</div>
-                    <div class="metric-value">{annualized_roi:.1f}%</div>
+                    <div class="metric-value">{annualized_roi * 100:.1f}%</div>
                 </div>
             </div>
         </div>

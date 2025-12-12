@@ -268,7 +268,10 @@ class MainWindow(tk.Tk):
             str(self.config.summary.selling_cost),
             tooltip_key="selling_cost",
         )
-        self.selling_cost_entry.pack(fill="x", pady=5)
+        # Only show for existing property (immediate selling cost)
+        # For new purchase, selling costs apply at exit, not upfront
+        if self._is_existing:
+            self.selling_cost_entry.pack(fill="x", pady=5)
 
         self.initial_reserves_entry = LabeledEntry(
             input_frame,
@@ -462,6 +465,20 @@ class MainWindow(tk.Tk):
             tooltip_key="square_feet",
         )
         self.square_feet_entry.pack(fill="x", pady=5)
+
+        # Price per square foot display (calculated)
+        self.price_per_sqft_label = ttk.Label(
+            input_frame,
+            text="",
+            foreground=Colors.FG_MUTED,
+            font=("TkDefaultFont", 9),
+        )
+        self.price_per_sqft_label.pack(anchor="w", padx=(170, 0))
+
+        # Bind updates for price per sqft calculation
+        self.property_value_entry.entry.bind("<KeyRelease>", lambda e: self._update_price_per_sqft())
+        self.square_feet_entry.entry.bind("<KeyRelease>", lambda e: self._update_price_per_sqft())
+        self._update_price_per_sqft()
 
         # --- Has Loan Checkbox ---
         self.has_loan_var = tk.BooleanVar(value=self.config.loan.has_loan)
@@ -927,6 +944,19 @@ class MainWindow(tk.Tk):
             else:
                 self.property_value_entry.set_label("Property Value ($):")
 
+    def _update_price_per_sqft(self) -> None:
+        """Update the price per square foot display."""
+        try:
+            value = float(self.property_value_entry.get().replace(",", ""))
+            sqft = float(self.square_feet_entry.get().replace(",", ""))
+            if sqft > 0:
+                price_per_sqft = value / sqft
+                self.price_per_sqft_label.configure(text=f"= ${price_per_sqft:,.2f}/sq ft")
+            else:
+                self.price_per_sqft_label.configure(text="")
+        except (ValueError, ZeroDivisionError):
+            self.price_per_sqft_label.configure(text="")
+
     def _update_existing_property_help_text(self) -> None:
         """Update help text based on loan status."""
         if self.has_loan_var.get():
@@ -1217,11 +1247,15 @@ class MainWindow(tk.Tk):
             # Show renovation checkbox
             self.renovation_check.pack(anchor="w", pady=(20, 5))
 
-        # Update Compare tab - show/hide capital gains section
+        # Update Compare tab - show/hide existing property fields
         if self._is_existing:
+            # Show selling cost (applies immediately when selling existing property)
+            self.selling_cost_entry.pack(fill="x", pady=5, after=self.holding_period_entry)
             self.cap_gains_header.pack(anchor="w", pady=(15, 5))
             self.cap_gains_frame.pack(fill="x", pady=5)
         else:
+            # Hide selling cost for new purchase (only applies at exit, not upfront)
+            self.selling_cost_entry.pack_forget()
             self.cap_gains_header.pack_forget()
             self.cap_gains_frame.pack_forget()
 
