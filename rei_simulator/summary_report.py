@@ -10,6 +10,8 @@ from .amortization import AmortizationSchedule
 from .recurring_costs import RecurringCostSchedule
 from .asset_building import AssetBuildingSchedule
 from .investment_summary import InvestmentSummary, SellNowVsHoldAnalysis
+from .tax import calculate_sale_tax
+from .constants import BUILDING_VALUE_RATIO
 
 
 @dataclass
@@ -408,10 +410,22 @@ def _generate_new_purchase_report(data: ReportData) -> str:
     final_equity = asset.schedule['total_equity'].iloc[-1] if asset else data.down_payment
     total_appreciation = asset.total_appreciation_gain if asset else 0
 
-    # Cash flow
-    year1_cash_flow = asset.schedule['net_cash_flow'].iloc[0] if asset else 0
-    total_cash_flow = asset.total_cash_flow if asset else 0
+    # Cash flow - now showing pre-tax and tax benefits separately for transparency
+    year1_pre_tax_cf = asset.schedule['pre_tax_cash_flow'].iloc[1] if asset and len(asset.schedule) > 1 else 0
+    year1_tax_benefit = asset.schedule['total_tax_benefit'].iloc[1] if asset and len(asset.schedule) > 1 else 0
+    year1_cash_flow = year1_pre_tax_cf + year1_tax_benefit
+
+    total_pre_tax_cash_flow = inv.total_pre_tax_cash_flow if inv else 0
+    total_tax_benefits = inv.total_tax_benefits if inv else 0
+    total_cash_flow = inv.total_cash_flow_received if inv else 0  # pre-tax + tax benefits
+
+    # Compounded cash flow now only includes actual property cash flows (not tax benefits)
+    # Tax benefits are tracked separately and added to total profit without compounding
+    compounded_cash_flow = inv.compounded_cash_flow if inv else 0
     cash_on_cash_y1 = asset.cash_on_cash_return_year1 if asset else 0
+
+    # Total wealth = property equity + compounded cash flow pool + tax benefits
+    total_wealth = final_equity + compounded_cash_flow + total_tax_benefits
 
     # Rental income
     gross_rent_annual = data.monthly_rent * 12
@@ -425,35 +439,28 @@ def _generate_new_purchase_report(data: ReportData) -> str:
     selling_costs = sale_price * 0.06  # 6% default
     net_sale_proceeds = sale_price - selling_costs - final_loan_balance
 
-    # Capital gains tax estimates
+    # Capital gains tax estimates using centralized tax functions
     cap_gains_rate = 0.15  # Long-term capital gains rate
-    depreciation_recapture_rate = 0.25  # IRS rate for depreciation recapture
+    effective_purchase = data.purchase_price if data.purchase_price > 0 else data.property_value
+    building_value = effective_purchase * BUILDING_VALUE_RATIO
 
-    # RE capital gains for rental property:
-    # 1. Depreciation recapture taxed at 25%
-    # 2. Remaining gain taxed at 15%
+    # Calculate RE capital gains tax (assumes rental property with depreciation)
+    re_tax_estimate = calculate_sale_tax(
+        sale_price=sale_price,
+        original_purchase_price=effective_purchase,
+        capital_improvements=0.0,  # Not tracked in ReportData
+        years_owned=data.holding_years,
+        building_value=building_value,
+        was_rental=data.monthly_rent > 0,  # Assume rental if rent > 0
+        capital_gains_rate=cap_gains_rate,
+        selling_costs=selling_costs,
+        loan_balance=final_loan_balance,
+    )
 
-    # Calculate accumulated depreciation (building value / 27.5 years * holding years)
-    building_value = data.purchase_price * 0.80  # ~80% of purchase price is building (not land)
-    annual_depreciation = building_value / 27.5
-    accumulated_depreciation = annual_depreciation * data.holding_years
-
-    # Adjusted cost basis = purchase price - accumulated depreciation
-    adjusted_basis = data.purchase_price - accumulated_depreciation
-
-    # Total gain = sale price - adjusted basis - selling costs
-    total_re_gain = max(0, sale_price - adjusted_basis - selling_costs)
-
-    # Depreciation recapture = lesser of (accumulated depreciation) or (total gain)
-    depreciation_recapture = min(accumulated_depreciation, total_re_gain)
-    depreciation_recapture_tax = depreciation_recapture * depreciation_recapture_rate
-
-    # Remaining gain taxed at regular cap gains rate
-    remaining_gain = max(0, total_re_gain - depreciation_recapture)
-    remaining_gain_tax = remaining_gain * cap_gains_rate
-
-    # Total RE capital gains tax
-    re_cap_gains_tax = depreciation_recapture_tax + remaining_gain_tax
+    # Extract values for display
+    accumulated_depreciation = re_tax_estimate.accumulated_depreciation
+    annual_depreciation = accumulated_depreciation / data.holding_years if data.holding_years > 0 else 0
+    re_cap_gains_tax = re_tax_estimate.total_tax
     re_after_tax_profit = total_profit - re_cap_gains_tax
 
     # S&P capital gains: tax on all gains at 15%
@@ -501,9 +508,21 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                     <tr class="highlight">
                         <td><strong>Net Rental Income</strong></td>
                         <td class="text-right"><strong>{_format_currency(net_rental_income)}</strong></td>
-                        <td><strong>Year 1 Cash Flow</strong></td>
-                        <td class="text-right"><strong>{_format_currency(year1_cash_flow)}</strong></td>
+                        <td><strong>Pre-Tax Cash Flow (Y1)</strong></td>
+                        <td class="text-right {'text-danger' if year1_pre_tax_cf < 0 else ''}"><strong>{_format_currency(year1_pre_tax_cf)}</strong></td>
                     </tr>
+                    {f'''<tr>
+                        <td></td>
+                        <td></td>
+                        <td>+ Tax Benefits (Y1)</td>
+                        <td class="text-right text-success">+{_format_currency(year1_tax_benefit)}</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td></td>
+                        <td></td>
+                        <td><strong>Net Cash Flow (Y1)</strong></td>
+                        <td class="text-right"><strong>{_format_currency(year1_cash_flow)}</strong></td>
+                    </tr>''' if year1_tax_benefit > 0 else ''}
                 </table>
             </div>
 
@@ -512,10 +531,14 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                     <div class="metric-label">Cash-on-Cash Return (Y1)</div>
                     <div class="metric-value">{cash_on_cash_y1:.1f}%</div>
                 </div>
-                <div class="metric {'success' if total_cash_flow > 0 else 'danger'}">
-                    <div class="metric-label">Total Cash Flow ({data.holding_years} yrs)</div>
-                    <div class="metric-value small">{_format_currency(total_cash_flow)}</div>
+                <div class="metric {'success' if total_pre_tax_cash_flow > 0 else 'danger'}">
+                    <div class="metric-label">Pre-Tax Cash Flow ({data.holding_years} yrs)</div>
+                    <div class="metric-value small">{_format_currency(total_pre_tax_cash_flow)}</div>
                 </div>
+                {f'''<div class="metric success">
+                    <div class="metric-label">Total Tax Benefits ({data.holding_years} yrs)</div>
+                    <div class="metric-value small">{_format_currency(total_tax_benefits)}</div>
+                </div>''' if total_tax_benefits > 0 else ''}
             </div>
         </div>
         """
@@ -607,7 +630,7 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                         <td><strong>Total Cash Required</strong></td>
                         <td class="text-right"><strong>{_format_currency(total_initial_investment)}</strong></td>
                         <td><strong>Initial LTV</strong></td>
-                        <td class="text-right"><strong>{(data.loan_amount / data.property_value * 100):.1f}%</strong></td>
+                        <td class="text-right"><strong>{(data.loan_amount / (data.purchase_price if data.purchase_price > 0 else data.property_value) * 100):.1f}%</strong></td>
                     </tr>
                 </table>
             </div>
@@ -701,6 +724,18 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                         <td><strong>Total Equity</strong></td>
                         <td class="text-right"><strong>{_format_currency(final_equity)}</strong></td>
                     </tr>
+                    <tr>
+                        <td>+ Compounded Pre-Tax Cash Flow</td>
+                        <td class="text-right">{_format_currency(compounded_cash_flow)}</td>
+                    </tr>
+                    {f'''<tr>
+                        <td>+ Cumulative Tax Benefits</td>
+                        <td class="text-right">{_format_currency(total_tax_benefits)}</td>
+                    </tr>''' if total_tax_benefits > 0 else ''}
+                    <tr class="highlight" style="background: var(--primary); color: white;">
+                        <td><strong>Total Wealth</strong></td>
+                        <td class="text-right"><strong>{_format_currency(total_wealth)}</strong></td>
+                    </tr>
                 </table>
             </div>
         </div>
@@ -755,7 +790,7 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                 </div>
             </div>
 
-            <h3 style="margin-bottom: 0.75rem; font-size: 1rem; color: var(--gray-700);">After-Tax Comparison (Est. 15% Cap Gains)</h3>
+            <h3 style="margin-bottom: 0.75rem; font-size: 1rem; color: var(--gray-700);">After-Tax Comparison (25% Depreciation Recapture + 15% Cap Gains)</h3>
             <div class="table-container" style="margin-bottom: 1rem;">
                 <table>
                     <tr>
@@ -820,6 +855,81 @@ def _generate_new_purchase_report(data: ReportData) -> str:
             </div>
         </div>
 
+        <!-- Key Assumptions -->
+        <div class="section">
+            <h2>Key Assumptions</h2>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <th colspan="2">Growth Rates</th>
+                        <th colspan="2">Rental Assumptions</th>
+                    </tr>
+                    <tr>
+                        <td>Property Appreciation</td>
+                        <td class="text-right">{data.appreciation_rate * 100:.1f}% / year</td>
+                        <td>Monthly Rent</td>
+                        <td class="text-right">{_format_currency(data.monthly_rent)}</td>
+                    </tr>
+                    <tr>
+                        <td>Rent Growth</td>
+                        <td class="text-right">{(inv.params.rent_growth_rate if inv else 0.03) * 100:.1f}% / year</td>
+                        <td>Vacancy Rate</td>
+                        <td class="text-right">{data.vacancy_rate * 100:.1f}%</td>
+                    </tr>
+                    <tr>
+                        <td>S&P 500 Return</td>
+                        <td class="text-right">{(inv.params.alternative_return_rate if inv else 0.10) * 100:.1f}% / year</td>
+                        <td>Property Management</td>
+                        <td class="text-right">{data.management_rate * 100:.1f}%</td>
+                    </tr>
+                    <tr>
+                        <td>Cost Inflation</td>
+                        <td class="text-right">{(inv.params.cost_inflation_rate if inv else 0.03) * 100:.1f}% / year</td>
+                        <td>Holding Period</td>
+                        <td class="text-right">{data.holding_years} years</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="table-container" style="margin-top: 1rem;">
+                <table>
+                    <tr>
+                        <th colspan="2">Exit Assumptions</th>
+                        <th colspan="2">Tax Assumptions</th>
+                    </tr>
+                    <tr>
+                        <td>Selling Costs</td>
+                        <td class="text-right">{(inv.params.selling_cost_percent if inv else 0.06) * 100:.1f}%</td>
+                        <td>Capital Gains Rate</td>
+                        <td class="text-right">15%</td>
+                    </tr>
+                    <tr>
+                        <td>Depreciation (27.5 yr)</td>
+                        <td class="text-right">{_format_currency(annual_depreciation)} / year</td>
+                        <td>Depreciation Recapture</td>
+                        <td class="text-right">25%</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cash Flow Note -->
+        <div class="section" style="background: var(--gray-50); border-left: 4px solid var(--gray-300);">
+            <h2 style="color: var(--gray-600);">Note: Investment Comparison Methodology</h2>
+            <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6;">
+                This analysis uses <strong>transparent, fair assumptions</strong> for comparing real estate to stock market returns:
+            </p>
+            <ul style="color: var(--gray-600); font-size: 0.9rem; margin: 0.5rem 0 0.5rem 1.5rem;">
+                <li><strong>S&P 500:</strong> Initial investment compounds at the S&P return rate for the holding period</li>
+                <li><strong>Pre-Tax Cash Flow:</strong> Actual property cash (rent - expenses - mortgage) compounds at S&P rate</li>
+                <li><strong>Tax Benefits:</strong> Savings from deductions (interest, depreciation, QBI) are summed but NOT compounded - these reduce taxes owed, they aren't investable property cash</li>
+                <li><strong>RE Total Profit:</strong> Sale Proceeds + Compounded Pre-Tax Cash Flow + Total Tax Benefits - Initial Investment</li>
+            </ul>
+            <p style="color: var(--gray-600); font-size: 0.9rem; margin-top: 0.5rem;">
+                <strong>Important:</strong> Negative pre-tax cash flow means you're subsidizing the property from other income.
+                Tax benefits offset this but require sufficient taxable income elsewhere to realize.
+            </p>
+        </div>
+
         <footer>
             <p>Generated by Real Estate Investment Simulator</p>
             <p>This analysis is for informational purposes only and should not be considered financial advice.</p>
@@ -878,7 +988,11 @@ def _generate_existing_property_report(data: ReportData) -> str:
     # Cash flow
     year1_cash_flow = asset.schedule['net_cash_flow'].iloc[0] if asset else 0
     total_cash_flow = asset.total_cash_flow if asset else 0
+    compounded_cash_flow = inv.compounded_cash_flow if inv else 0
     cash_on_cash_y1 = asset.cash_on_cash_return_year1 if asset else 0
+
+    # Total wealth = property equity + compounded cash flow pool
+    total_wealth = final_equity + compounded_cash_flow
 
     # Rental income
     gross_rent_annual = data.monthly_rent * 12
@@ -943,9 +1057,21 @@ def _generate_existing_property_report(data: ReportData) -> str:
                     <tr class="highlight">
                         <td><strong>Net Rental Income</strong></td>
                         <td class="text-right"><strong>{_format_currency(net_rental_income)}</strong></td>
-                        <td><strong>Year 1 Cash Flow</strong></td>
-                        <td class="text-right"><strong>{_format_currency(year1_cash_flow)}</strong></td>
+                        <td><strong>Pre-Tax Cash Flow (Y1)</strong></td>
+                        <td class="text-right {'text-danger' if year1_pre_tax_cf < 0 else ''}"><strong>{_format_currency(year1_pre_tax_cf)}</strong></td>
                     </tr>
+                    {f'''<tr>
+                        <td></td>
+                        <td></td>
+                        <td>+ Tax Benefits (Y1)</td>
+                        <td class="text-right text-success">+{_format_currency(year1_tax_benefit)}</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td></td>
+                        <td></td>
+                        <td><strong>Net Cash Flow (Y1)</strong></td>
+                        <td class="text-right"><strong>{_format_currency(year1_cash_flow)}</strong></td>
+                    </tr>''' if year1_tax_benefit > 0 else ''}
                 </table>
             </div>
 
@@ -954,10 +1080,14 @@ def _generate_existing_property_report(data: ReportData) -> str:
                     <div class="metric-label">Cash-on-Cash Return (Y1)</div>
                     <div class="metric-value">{cash_on_cash_y1:.1f}%</div>
                 </div>
-                <div class="metric {'success' if total_cash_flow > 0 else 'danger'}">
-                    <div class="metric-label">Total Cash Flow ({data.holding_years} yrs)</div>
-                    <div class="metric-value small">{_format_currency(total_cash_flow)}</div>
+                <div class="metric {'success' if total_pre_tax_cash_flow > 0 else 'danger'}">
+                    <div class="metric-label">Pre-Tax Cash Flow ({data.holding_years} yrs)</div>
+                    <div class="metric-value small">{_format_currency(total_pre_tax_cash_flow)}</div>
                 </div>
+                {f'''<div class="metric success">
+                    <div class="metric-label">Total Tax Benefits ({data.holding_years} yrs)</div>
+                    <div class="metric-value small">{_format_currency(total_tax_benefits)}</div>
+                </div>''' if total_tax_benefits > 0 else ''}
             </div>
         </div>
         """
@@ -991,14 +1121,14 @@ def _generate_existing_property_report(data: ReportData) -> str:
                     <div class="comparison-label">If You Hold {data.holding_years} Years</div>
                     <div class="comparison-value" style="color: #059669;">{_format_currency(hold_outcome)}</div>
                     <div style="font-size: 0.85rem; color: var(--gray-600); margin-top: 0.5rem;">
-                        Sale proceeds + accumulated cash flow
+                        Sale proceeds + compounded cash flow
                     </div>
                 </div>
                 <div class="comparison-item sell">
                     <div class="comparison-label">If You Sell Now & Invest</div>
                     <div class="comparison-value" style="color: #d97706;">{_format_currency(sell_now_outcome)}</div>
                     <div style="font-size: 0.85rem; color: var(--gray-600); margin-top: 0.5rem;">
-                        Net proceeds invested in S&P 500
+                        Net proceeds compounded in S&P 500
                     </div>
                 </div>
             </div>
@@ -1195,9 +1325,17 @@ def _generate_existing_property_report(data: ReportData) -> str:
                         <td>+ Appreciation</td>
                         <td class="text-right">{_format_currency(total_appreciation)}</td>
                     </tr>
-                    <tr class="highlight-green">
+                    <tr class="highlight">
                         <td><strong>Future Equity (Year {data.holding_years})</strong></td>
                         <td class="text-right"><strong>{_format_currency(final_equity)}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>+ Compounded Cash Flow Pool</td>
+                        <td class="text-right">{_format_currency(compounded_cash_flow)}</td>
+                    </tr>
+                    <tr class="highlight" style="background: var(--primary); color: white;">
+                        <td><strong>Total Wealth</strong></td>
+                        <td class="text-right"><strong>{_format_currency(total_wealth)}</strong></td>
                     </tr>
                 </table>
             </div>
@@ -1230,6 +1368,24 @@ def _generate_existing_property_report(data: ReportData) -> str:
                     </tr>
                 </table>
             </div>
+        </div>
+
+        <!-- Cash Flow Note -->
+        <div class="section" style="background: var(--gray-50); border-left: 4px solid var(--gray-300);">
+            <h2 style="color: var(--gray-600);">Note: Investment Comparison Methodology</h2>
+            <p style="color: var(--gray-600); font-size: 0.9rem; line-height: 1.6;">
+                This analysis uses <strong>transparent, fair assumptions</strong> for comparing real estate to stock market returns:
+            </p>
+            <ul style="color: var(--gray-600); font-size: 0.9rem; margin: 0.5rem 0 0.5rem 1.5rem;">
+                <li><strong>S&P 500:</strong> Initial investment compounds at the S&P return rate for the holding period</li>
+                <li><strong>Pre-Tax Cash Flow:</strong> Actual property cash (rent - expenses - mortgage) compounds at S&P rate</li>
+                <li><strong>Tax Benefits:</strong> Savings from deductions (interest, depreciation, QBI) are summed but NOT compounded - these reduce taxes owed, they aren't investable property cash</li>
+                <li><strong>RE Total Profit:</strong> Sale Proceeds + Compounded Pre-Tax Cash Flow + Total Tax Benefits - Initial Investment</li>
+            </ul>
+            <p style="color: var(--gray-600); font-size: 0.9rem; margin-top: 0.5rem;">
+                <strong>Important:</strong> Negative pre-tax cash flow means you're subsidizing the property from other income.
+                Tax benefits offset this but require sufficient taxable income elsewhere to realize.
+            </p>
         </div>
 
         <footer>

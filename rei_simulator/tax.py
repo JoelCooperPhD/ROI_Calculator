@@ -494,7 +494,10 @@ def calculate_sale_tax(
     adjusted_basis = calculate_adjusted_basis(cost_basis, accumulated_depreciation)
 
     # Step 4: Calculate total gain
-    total_gain = max(0, calculate_total_gain(sale_price, adjusted_basis))
+    # IRS: Amount Realized = Sale Price - Selling Costs
+    # Gain = Amount Realized - Adjusted Basis
+    amount_realized = sale_price - selling_costs
+    total_gain = max(0, calculate_total_gain(amount_realized, adjusted_basis))
 
     # Step 5: Calculate depreciation recapture
     depreciation_recapture, depreciation_recapture_tax = calculate_depreciation_recapture_tax(

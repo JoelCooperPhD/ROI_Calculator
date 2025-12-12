@@ -191,9 +191,9 @@ def generate_amortization_schedule(params: LoanParameters, analysis_years: int =
     # Calculate periodic amounts for escrow items
     periods_per_year = params.periods_per_year
 
-    # Determine total periods - use max of loan term and analysis period
+    # Determine total periods - use analysis period if specified, otherwise loan term
     if analysis_years is not None:
-        total_periods = max(params.total_periods, analysis_years * periods_per_year)
+        total_periods = min(params.total_periods, analysis_years * periods_per_year)
     else:
         total_periods = params.total_periods
     tax_periodic = (params.property_tax_rate * params.property_value / periods_per_year) if params.property_value > 0 else 0

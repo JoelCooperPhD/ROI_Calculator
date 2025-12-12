@@ -153,9 +153,11 @@ class YearlyProjection:
     total_tax_benefit: float
 
     # Cash flow
-    pre_tax_cash_flow: float
-    net_cash_flow: float
-    cumulative_cash_flow: float
+    pre_tax_cash_flow: float  # Actual cash in/out from property operations
+    net_cash_flow: float  # pre_tax + tax_benefit (for display/IRR)
+    cumulative_cash_flow: float  # Running sum of net_cash_flow
+    cumulative_pre_tax_cash_flow: float  # Running sum of actual cash flows
+    cumulative_tax_benefits: float  # Running sum of tax benefits
 
     # If sold this year
     sale_price: float
@@ -177,22 +179,17 @@ class InvestmentSummary:
     annualized_roi: float  # Average annual ROI
     equity_multiple: float  # Total value / Initial investment
 
-    # Comparison metrics (matched cash flow methodology)
-    alternative_final_value: float  # S&P value with matched cash flows
-    alternative_profit: float  # S&P profit with matched cash flows
-    outperformance: float  # How much better than alternative
-
-    # Legacy comparison (initial investment only - for reference)
-    alternative_simple_value: float  # S&P with only initial investment
-    alternative_simple_profit: float
-
-    # Capital deployment tracking
-    total_capital_deployed: float  # All cash out of pocket over holding period
-    cumulative_negative_cash_flows: float  # Additional capital beyond initial
+    # S&P 500 comparison (simple growth on initial investment)
+    alternative_final_value: float  # S&P final value
+    alternative_profit: float  # S&P profit
+    outperformance: float  # RE profit - S&P profit
 
     # Cash flow summary
     total_cash_invested: float
-    total_cash_flow_received: float
+    total_cash_flow_received: float  # Simple sum of net cash flows (pre-tax + tax benefit)
+    total_pre_tax_cash_flow: float  # Simple sum of actual property cash flows
+    total_tax_benefits: float  # Simple sum of all tax benefits over holding period
+    compounded_cash_flow: float  # Actual cash flows compounded at S&P rate (NOT tax benefits)
     net_sale_proceeds: float
 
     def get_projection_at_year(self, year: int) -> Optional[YearlyProjection]:
@@ -304,8 +301,13 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
     base_monthly_rent = params.monthly_rent
 
     yearly_projections = []
-    cumulative_cash_flow = 0
     cash_flows_for_irr = [-params.total_initial_investment]  # Initial investment is negative
+
+    # Cash flow pool: accumulates ACTUAL property cash flows and compounds at S&P rate
+    # This provides a fair comparison - actual cash flow earns the same return as the alternative
+    # Tax benefits are tracked separately - they reduce taxes but aren't investable property cash
+    cash_flow_pool = 0.0  # Only actual pre-tax cash flows compound here
+    cumulative_tax_benefits = 0.0  # Tax benefits accumulate but don't compound
 
     for year in range(1, params.holding_period_years + 1):
         # Property appreciation (from post-renovation value if applicable)
@@ -314,6 +316,18 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         # Loan balance and interest paid this year
         loan_balance = loan_balances[year - 1] if year <= len(loan_balances) else 0
         interest_paid = interest_by_year[year - 1] if year <= len(interest_by_year) else 0
+
+        # Mortgage payment (P&I only, operating costs separate)
+        # Pay mortgage if loan existed at START of year
+        if year == 1:
+            start_of_year_balance = params.loan_amount
+        else:
+            start_of_year_balance = loan_balances[year - 2]
+
+        if start_of_year_balance > 0:
+            mortgage_payment = params.monthly_pi_payment * 12
+        else:
+            mortgage_payment = 0
 
         # Equity
         equity = property_value - loan_balance
@@ -351,19 +365,6 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         cost_inflation = (1 + params.cost_inflation_rate) ** (year - 1)
         operating_costs = params.annual_operating_costs * cost_inflation
 
-        # Mortgage payment (P&I only, operating costs separate)
-        # Pay mortgage if loan existed at START of year (not end of year)
-        # This ensures we charge mortgage payments for the year the loan gets paid off
-        if year == 1:
-            start_of_year_balance = params.loan_amount
-        else:
-            start_of_year_balance = loan_balances[year - 2]
-
-        if start_of_year_balance > 0:
-            mortgage_payment = params.monthly_pi_payment * 12
-        else:
-            mortgage_payment = 0
-
         # Total expenses (management_cost already subtracted in net_rental_income)
         total_expenses = mortgage_payment + operating_costs
 
@@ -394,17 +395,31 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         # Pre-tax cash flow
         pre_tax_cash_flow = net_rental_income - total_expenses
 
-        # Net cash flow for the year (includes tax benefits)
+        # Net cash flow for the year (includes tax benefits - used for IRR and display)
         net_cash_flow = pre_tax_cash_flow + total_tax_benefit
-        cumulative_cash_flow += net_cash_flow
+
+        # Compound only ACTUAL property cash flows at S&P rate
+        # Tax benefits are NOT compounded - they represent tax savings, not investable cash
+        # If pre_tax_cash_flow is negative, you're subsidizing the property (opportunity cost)
+        # If positive, you could reinvest that actual cash
+        cash_flow_pool = cash_flow_pool * (1 + params.alternative_return_rate) + pre_tax_cash_flow
+
+        # Track tax benefits separately (simple sum, no compounding)
+        cumulative_tax_benefits += total_tax_benefit
+
+        # Cumulative cash flows for display (simple sums, not compounded)
+        cumulative_cash_flow = sum(p.net_cash_flow for p in yearly_projections) + net_cash_flow
+        cumulative_pre_tax_cf = sum(p.pre_tax_cash_flow for p in yearly_projections) + pre_tax_cash_flow
 
         # If sold at end of this year
         sale_price = property_value
         selling_costs = sale_price * params.selling_cost_percent
         net_sale_proceeds = sale_price - selling_costs - loan_balance
 
-        # Total profit if sold this year
-        total_profit = cumulative_cash_flow + net_sale_proceeds - params.total_initial_investment
+        # Total profit if sold this year:
+        # = Compounded actual cash flows + Cumulative tax benefits + Sale proceeds - Initial investment
+        # This separates actual property cash (compounded) from tax savings (summed)
+        total_profit = cash_flow_pool + cumulative_tax_benefits + net_sale_proceeds - params.total_initial_investment
 
         projection = YearlyProjection(
             year=year,
@@ -429,6 +444,8 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
             pre_tax_cash_flow=pre_tax_cash_flow,
             net_cash_flow=net_cash_flow,
             cumulative_cash_flow=cumulative_cash_flow,
+            cumulative_pre_tax_cash_flow=cumulative_pre_tax_cf,
+            cumulative_tax_benefits=cumulative_tax_benefits,
             sale_price=sale_price,
             selling_costs=selling_costs,
             net_sale_proceeds=net_sale_proceeds,
@@ -437,7 +454,6 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         yearly_projections.append(projection)
 
         # For IRR calculation: add this year's cash flow
-        # In the final year, also add sale proceeds
         if year < params.holding_period_years:
             cash_flows_for_irr.append(net_cash_flow)
         else:
@@ -461,25 +477,16 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
     equity_multiple = (params.total_initial_investment + total_profit) / params.total_initial_investment if params.total_initial_investment > 0 else 0
 
     # ==========================================================================
-    # S&P COMPARISON WITH MATCHED CASH FLOWS
+    # S&P COMPARISON - SIMPLE GROWTH ON INITIAL INVESTMENT
     # ==========================================================================
-    # Use the comparison module for fair S&P comparison
-    yearly_cash_flows = [proj.net_cash_flow for proj in yearly_projections]
+    # S&P just compounds initial investment. RE profit already includes
+    # compounded cash flow, making this a fair apples-to-apples comparison.
     alt_comparison = generate_alternative_comparison(
         initial_investment=params.total_initial_investment,
-        yearly_cash_flows=yearly_cash_flows,
         real_estate_profit=total_profit,
         alternative_return_rate=params.alternative_return_rate,
         holding_period_years=params.holding_period_years,
     )
-
-    alternative_final_value = alt_comparison.alternative_final_value
-    alternative_profit = alt_comparison.alternative_profit
-    outperformance = alt_comparison.outperformance
-    alternative_simple_value = alt_comparison.alternative_simple_value
-    alternative_simple_profit = alt_comparison.alternative_simple_profit
-    total_capital_deployed = alt_comparison.total_capital_deployed
-    cumulative_negative_cash_flows = alt_comparison.cumulative_negative_cash_flows
 
     return InvestmentSummary(
         params=params,
@@ -489,15 +496,14 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
         total_roi=total_roi,
         annualized_roi=annualized_roi,
         equity_multiple=equity_multiple,
-        alternative_final_value=alternative_final_value,
-        alternative_profit=alternative_profit,
-        outperformance=outperformance,
-        alternative_simple_value=alternative_simple_value,
-        alternative_simple_profit=alternative_simple_profit,
-        total_capital_deployed=total_capital_deployed,
-        cumulative_negative_cash_flows=cumulative_negative_cash_flows,
+        alternative_final_value=alt_comparison.alternative_final_value,
+        alternative_profit=alt_comparison.alternative_profit,
+        outperformance=alt_comparison.outperformance,
         total_cash_invested=params.total_initial_investment,
         total_cash_flow_received=final.cumulative_cash_flow,
+        total_pre_tax_cash_flow=final.cumulative_pre_tax_cash_flow,
+        total_tax_benefits=final.cumulative_tax_benefits,
+        compounded_cash_flow=cash_flow_pool,  # Now only actual cash flows, not tax benefits
         net_sale_proceeds=final.net_sale_proceeds,
     )
 
@@ -676,8 +682,9 @@ def generate_sell_now_vs_hold_analysis(
         # =================================================================
         # SCENARIO B: HOLD THE PROPERTY
         # =================================================================
-        # TOTAL VALUE = sale proceeds + cumulative cash flow received (pre-tax)
-        hold_total_value = hold_proj.net_sale_proceeds + hold_proj.cumulative_cash_flow
+        # TOTAL VALUE = total_profit + initial_investment
+        # (total_profit already includes compounded cash flow pool)
+        hold_total_value = hold_proj.total_profit + params.total_initial_investment
 
         # Calculate after-tax value if we sold property at this year
         # Need to recalculate taxes based on appreciated value and additional years owned
@@ -696,7 +703,12 @@ def generate_sell_now_vs_hold_analysis(
                 selling_costs=hold_proj.selling_costs,
                 loan_balance=hold_proj.loan_balance,
             )
-            hold_after_tax = future_tax.after_tax_proceeds + hold_proj.cumulative_cash_flow
+            # After-tax hold = after-tax sale proceeds + compounded cash flow pool + tax benefits
+            # total_profit = compounded_cash_flow + tax_benefits + net_sale_proceeds - initial_investment
+            # The compounded_cf here is the cash flow pool (actual cash) + cumulative tax benefits
+            # We add these to after-tax sale proceeds for total after-tax outcome
+            compounded_cf_and_benefits = hold_proj.total_profit - hold_proj.net_sale_proceeds + params.total_initial_investment
+            hold_after_tax = future_tax.after_tax_proceeds + compounded_cf_and_benefits
         else:
             # No tax calculation - use pre-tax values
             hold_after_tax = hold_total_value
@@ -705,6 +717,10 @@ def generate_sell_now_vs_hold_analysis(
         difference = hold_total_value - sell_total_value
         difference_after_tax = hold_after_tax - sell_after_tax
 
+        # Calculate compounded cash flow + tax benefits for this year
+        # This is the sum of compounded actual cash flows plus cumulative tax benefits
+        compounded_cf_and_benefits_year = hold_proj.total_profit - hold_proj.net_sale_proceeds + params.total_initial_investment
+
         comparison_data.append({
             "year": year,
             "sell_now_value": sell_total_value,
@@ -712,7 +728,9 @@ def generate_sell_now_vs_hold_analysis(
             "sell_after_tax": sell_after_tax,
             "hold_sale_proceeds": hold_proj.net_sale_proceeds,
             "hold_cash_flow": hold_proj.net_cash_flow,
-            "hold_cumulative_cash_flow": hold_proj.cumulative_cash_flow,
+            "hold_pre_tax_cash_flow": hold_proj.pre_tax_cash_flow,
+            "hold_tax_benefit": hold_proj.total_tax_benefit,
+            "hold_compounded_cash_flow": compounded_cf_and_benefits_year,
             "hold_total_outcome": hold_total_value,
             "hold_after_tax": hold_after_tax,
             "difference": difference,

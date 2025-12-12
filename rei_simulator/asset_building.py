@@ -583,7 +583,9 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
             # Cash flow
             "pre_tax_cash_flow": pre_tax_cash_flow,
             "net_cash_flow": net_cash_flow,
-            "cumulative_cash_flow": 0,  # Will be filled below
+            "cumulative_cash_flow": 0,  # Will be filled below (sum of net_cash_flow)
+            "cumulative_pre_tax_cash_flow": 0,  # Will be filled below (sum of actual cash)
+            "cumulative_tax_benefits": 0,  # Will be filled below (sum of tax benefits)
             # Returns
             "cash_on_cash": cash_on_cash,
             "equity_roi": equity_roi,
@@ -593,8 +595,10 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
 
     df = pd.DataFrame(records)
 
-    # Calculate cumulative cash flow
+    # Calculate cumulative values
     df["cumulative_cash_flow"] = df["net_cash_flow"].cumsum()
+    df["cumulative_pre_tax_cash_flow"] = df["pre_tax_cash_flow"].cumsum()
+    df["cumulative_tax_benefits"] = df["total_tax_benefit"].cumsum()
 
     # Calculate total return (equity + cumulative cash flow)
     df["total_return"] = df["total_equity"] + df["cumulative_cash_flow"] - params.initial_equity
