@@ -175,6 +175,12 @@ class CalculationEngine:
             property_management_rate=self.model.management_rate,
         )
 
+        # PMI calculation for asset building
+        ltv = 0.0
+        if self.model.purchase_price > 0:
+            ltv = self.model.loan_amount / self.model.purchase_price
+        pmi_annual = self.model.pmi_rate * self.model.loan_amount if ltv > 0.8 else 0.0
+
         params = AssetBuildingParameters(
             property_value=self.model.property_value,
             purchase_price=self.model.purchase_price,
@@ -189,8 +195,10 @@ class CalculationEngine:
             property_taxes_annual=self.model.property_tax_annual,
             insurance_annual=self.model.insurance_annual,
             hoa_annual=self.model.hoa_monthly * 12,
+            pmi_annual=pmi_annual,
             maintenance_annual=self.model.maintenance_annual,
             utilities_annual=self.model.utilities_annual,
+            cost_growth_config=self.model.cost_growth_config,
             marginal_tax_rate=self.model.marginal_tax_rate,
             depreciation_enabled=self.model.depreciation_enabled,
             qbi_deduction_enabled=self.model.qbi_deduction_enabled,
@@ -241,6 +249,7 @@ class CalculationEngine:
             selling_cost_percent=self.model.selling_cost_pct,
             initial_reserves=self.model.initial_reserves,
             alternative_return_rate=self.model.sp500_return,
+            cost_growth_config=self.model.cost_growth_config,
             renovation_enabled=self.model.renovation_enabled,
             renovation_cost=self.model.renovation_cost,
             renovation_duration_months=self.model.renovation_duration,

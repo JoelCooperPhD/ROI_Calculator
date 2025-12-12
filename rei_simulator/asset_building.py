@@ -17,6 +17,7 @@ from .constants import (
     QBI_DEDUCTION_RATE,
 )
 from .formulas import calculate_periodic_payment
+from .cost_growth import CostGrowthConfig, calculate_yearly_costs
 
 
 class AppreciationType(Enum):
@@ -111,12 +112,13 @@ class AssetBuildingParameters:
     property_taxes_annual: float = 0.0
     insurance_annual: float = 0.0
     hoa_annual: float = 0.0
+    pmi_annual: float = 0.0
     maintenance_annual: float = 0.0
     utilities_annual: float = 0.0  # For owner-occupied or included in rent
     other_costs_annual: float = 0.0
 
-    # Cost inflation
-    cost_inflation_rate: float = 0.03
+    # Cost growth configuration (replaces single cost_inflation_rate)
+    cost_growth_config: CostGrowthConfig = field(default_factory=CostGrowthConfig)
 
     # Tax benefits (simplified)
     marginal_tax_rate: float = 0.0  # For mortgage interest deduction
@@ -159,10 +161,23 @@ class AssetBuildingParameters:
             self.property_taxes_annual +
             self.insurance_annual +
             self.hoa_annual +
+            self.pmi_annual +
             self.maintenance_annual +
             self.utilities_annual +
             self.other_costs_annual
         )
+
+    @property
+    def base_costs(self) -> dict[str, float]:
+        """Base (year 1) costs by category for cost growth calculations."""
+        return {
+            "property_tax": self.property_taxes_annual,
+            "insurance": self.insurance_annual,
+            "hoa": self.hoa_annual,
+            "pmi": self.pmi_annual,
+            "maintenance": self.maintenance_annual,
+            "utilities": self.utilities_annual,
+        }
 
     @property
     def building_value_for_depreciation(self) -> float:
@@ -499,9 +514,19 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
             management_cost = 0
             rental_income = 0
 
-        # Calculate operating costs with inflation
-        cost_inflation = (1 + params.cost_inflation_rate) ** (year - 1)
-        operating_costs = params.total_annual_operating_costs * cost_inflation
+        # Calculate operating costs with per-category growth rates
+        # Determine if PMI is still required (LTV > 80%)
+        pmi_still_required = ltv > 0.80
+
+        # Calculate costs for each category with appropriate growth rates
+        cost_breakdown = calculate_yearly_costs(
+            base_costs=params.base_costs,
+            cost_growth_config=params.cost_growth_config,
+            appreciation_rate=appreciation_rate,
+            year=year,
+            pmi_still_required=pmi_still_required,
+        )
+        operating_costs = cost_breakdown.total
 
         # Calculate tax benefits
         mortgage_interest_deduction = interest_paid * params.marginal_tax_rate
@@ -570,8 +595,14 @@ def generate_asset_building_schedule(params: AssetBuildingParameters) -> AssetBu
             "effective_rent": effective_rent,
             "management_cost": management_cost,
             "rental_income": rental_income,
-            # Costs
+            # Costs (detailed breakdown for transparency)
             "operating_costs": operating_costs,
+            "cost_property_tax": cost_breakdown.property_tax,
+            "cost_insurance": cost_breakdown.insurance,
+            "cost_hoa": cost_breakdown.hoa,
+            "cost_pmi": cost_breakdown.pmi,
+            "cost_maintenance": cost_breakdown.maintenance,
+            "cost_utilities": cost_breakdown.utilities,
             "total_expenses": total_expenses,
             # Tax benefits
             "interest_deduction": mortgage_interest_deduction,

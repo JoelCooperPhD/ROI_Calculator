@@ -782,6 +782,100 @@ class MainWindow(tk.Tk):
         )
         self.internet_entry.pack(fill="x", pady=5)
 
+        # --- Cost Growth Section ---
+        section_header4 = ttk.Label(
+            input_frame,
+            text="Cost Growth Rates",
+            style="SectionHeader.TLabel",
+        )
+        section_header4.pack(anchor="w", pady=(15, 5))
+
+        self.inflation_rate_entry = LabeledEntry(
+            input_frame,
+            "General Inflation (%):",
+            str(self.model.general_inflation_rate * 100),
+            tooltip_key="general_inflation_rate",
+        )
+        self.inflation_rate_entry.pack(fill="x", pady=5)
+
+        # Advanced Cost Growth toggle
+        self.advanced_cost_growth_var = tk.BooleanVar(value=False)
+        self.advanced_cost_growth_check = LabeledCheckBox(
+            input_frame,
+            text="Advanced Cost Growth Settings",
+            variable=self.advanced_cost_growth_var,
+            command=self._toggle_advanced_cost_growth,
+            tooltip_key="advanced_cost_growth",
+        )
+        self.advanced_cost_growth_check.pack(anchor="w", pady=(10, 5))
+
+        # Advanced Cost Growth Frame (initially hidden)
+        self.advanced_cost_frame = ttk.Frame(input_frame, style="Section.TFrame")
+
+        # Property Tax Growth
+        self.property_tax_growth_var = tk.StringVar(value="Match Appreciation")
+        self.property_tax_growth_menu = LabeledOptionMenu(
+            self.advanced_cost_frame,
+            label="Property Tax Growth:",
+            variable=self.property_tax_growth_var,
+            values=["Match Appreciation", "Match Inflation", "Custom"],
+            tooltip_key="property_tax_growth",
+        )
+        self.property_tax_growth_menu.pack(fill="x", pady=3, padx=10)
+
+        # Insurance Growth
+        self.insurance_growth_var = tk.StringVar(value="Inflation + 1%")
+        self.insurance_growth_menu = LabeledOptionMenu(
+            self.advanced_cost_frame,
+            label="Insurance Growth:",
+            variable=self.insurance_growth_var,
+            values=["Inflation + 1%", "Match Inflation", "Custom"],
+            tooltip_key="insurance_growth",
+        )
+        self.insurance_growth_menu.pack(fill="x", pady=3, padx=10)
+
+        # HOA Growth
+        self.hoa_growth_var = tk.StringVar(value="Match Inflation")
+        self.hoa_growth_menu = LabeledOptionMenu(
+            self.advanced_cost_frame,
+            label="HOA Growth:",
+            variable=self.hoa_growth_var,
+            values=["Match Inflation", "Match Appreciation", "Custom"],
+            tooltip_key="hoa_growth",
+        )
+        self.hoa_growth_menu.pack(fill="x", pady=3, padx=10)
+
+        # Maintenance Growth
+        self.maintenance_growth_var = tk.StringVar(value="Match Appreciation")
+        self.maintenance_growth_menu = LabeledOptionMenu(
+            self.advanced_cost_frame,
+            label="Maintenance Growth:",
+            variable=self.maintenance_growth_var,
+            values=["Match Appreciation", "Match Inflation", "Custom"],
+            tooltip_key="maintenance_growth",
+        )
+        self.maintenance_growth_menu.pack(fill="x", pady=3, padx=10)
+
+        # Utilities Growth
+        self.utilities_growth_var = tk.StringVar(value="Match Inflation")
+        self.utilities_growth_menu = LabeledOptionMenu(
+            self.advanced_cost_frame,
+            label="Utilities Growth:",
+            variable=self.utilities_growth_var,
+            values=["Match Inflation", "Match Appreciation", "Custom"],
+            tooltip_key="utilities_growth",
+        )
+        self.utilities_growth_menu.pack(fill="x", pady=3, padx=10)
+
+        # Note about PMI
+        pmi_note = ttk.Label(
+            self.advanced_cost_frame,
+            text="Note: PMI does not inflate (fixed until removed)",
+            style="Info.TLabel",
+            font=("TkDefaultFont", 8, "italic"),
+        )
+        pmi_note.pack(anchor="w", pady=(5, 5), padx=10)
+
         # --- Chart Panel (Right) - Tabbed Charts ---
         chart_frame = ttk.Frame(tab_frame, style="Card.TFrame")
         chart_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 10), pady=10)
@@ -798,6 +892,10 @@ class MainWindow(tk.Tk):
         # Costs by Category tab
         self._canvas_frames["costs_category"] = ttk.Frame(self.costs_chart_notebook)
         self.costs_chart_notebook.add(self._canvas_frames["costs_category"], text="Costs by Category")
+
+        # Operating Costs Over Time tab (NEW - shows cost growth)
+        self._canvas_frames["costs_over_time"] = ttk.Frame(self.costs_chart_notebook)
+        self.costs_chart_notebook.add(self._canvas_frames["costs_over_time"], text="Costs Over Time")
 
     # =========================================================================
     # INCOME & GROWTH TAB BUILDER
@@ -944,6 +1042,13 @@ class MainWindow(tk.Tk):
             else:
                 self.property_value_entry.set_label("Property Value ($):")
 
+    def _toggle_advanced_cost_growth(self) -> None:
+        """Show/hide advanced cost growth settings."""
+        if self.advanced_cost_growth_var.get():
+            self.advanced_cost_frame.pack(fill="x", pady=5, after=self.advanced_cost_growth_check)
+        else:
+            self.advanced_cost_frame.pack_forget()
+
     def _update_price_per_sqft(self) -> None:
         """Update the price per square foot display."""
         try:
@@ -1018,7 +1123,11 @@ class MainWindow(tk.Tk):
 
     def _render_costs_chart(self) -> None:
         """Render all costs tab charts."""
-        from ..recurring_costs_plots import plot_true_cost_waterfall, plot_costs_by_category
+        from ..recurring_costs_plots import (
+            plot_true_cost_waterfall,
+            plot_costs_by_category,
+            plot_operating_costs_over_time,
+        )
 
         # Get monthly P&I from amortization schedule
         mortgage_pi = 0.0
@@ -1042,6 +1151,11 @@ class MainWindow(tk.Tk):
         # Costs by Category chart
         fig2 = plot_costs_by_category(self.model.recurring_costs_schedule)
         self._embed_chart("costs_category", fig2)
+
+        # Operating Costs Over Time chart (uses investment summary for detailed breakdown)
+        if self.model.investment_summary:
+            fig3 = plot_operating_costs_over_time(self.model.investment_summary)
+            self._embed_chart("costs_over_time", fig3)
 
     def _render_income_chart(self) -> None:
         """Render all income tab charts."""
@@ -1122,6 +1236,33 @@ class MainWindow(tk.Tk):
         self.model.water = safe_positive_float(self.water_entry.get(), 720)
         self.model.trash = safe_positive_float(self.trash_entry.get(), 300)
         self.model.internet = safe_positive_float(self.internet_entry.get(), 900)
+
+        # Cost Growth settings
+        self.model.general_inflation_rate = safe_percent(self.inflation_rate_entry.get(), 0.03)
+
+        # Map UI selections to growth types
+        growth_type_map = {
+            "Match Appreciation": "appreciation",
+            "Match Inflation": "inflation",
+            "Inflation + 1%": "inflation_plus",
+            "Custom": "custom",
+        }
+
+        self.model.property_tax_growth_type = growth_type_map.get(
+            self.property_tax_growth_var.get(), "appreciation"
+        )
+        self.model.insurance_growth_type = growth_type_map.get(
+            self.insurance_growth_var.get(), "inflation_plus"
+        )
+        self.model.hoa_growth_type = growth_type_map.get(
+            self.hoa_growth_var.get(), "inflation"
+        )
+        self.model.maintenance_growth_type = growth_type_map.get(
+            self.maintenance_growth_var.get(), "appreciation"
+        )
+        self.model.utilities_growth_type = growth_type_map.get(
+            self.utilities_growth_var.get(), "inflation"
+        )
 
         # Income & Growth tab
         self.model.appreciation_rate = safe_percent(self.appreciation_rate_entry.get(), 0.03)

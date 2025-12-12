@@ -4,6 +4,14 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ..config import AppConfig
+from ..cost_growth import CostGrowthConfig
+from ..constants import (
+    COST_GROWTH_TYPE_APPRECIATION,
+    COST_GROWTH_TYPE_INFLATION,
+    COST_GROWTH_TYPE_INFLATION_PLUS,
+    COST_GROWTH_TYPE_FIXED,
+    COST_GROWTH_TYPE_CUSTOM,
+)
 
 
 @dataclass
@@ -47,6 +55,22 @@ class DataModel:
     water: float = 720.0
     trash: float = 300.0
     internet: float = 900.0
+
+    # === Cost Growth Configuration ===
+    general_inflation_rate: float = 0.03
+    insurance_premium_above_inflation: float = 0.01
+    # Growth types: "appreciation", "inflation", "inflation_plus", "fixed", "custom"
+    property_tax_growth_type: str = COST_GROWTH_TYPE_APPRECIATION
+    insurance_growth_type: str = COST_GROWTH_TYPE_INFLATION_PLUS
+    hoa_growth_type: str = COST_GROWTH_TYPE_INFLATION
+    maintenance_growth_type: str = COST_GROWTH_TYPE_APPRECIATION
+    utilities_growth_type: str = COST_GROWTH_TYPE_INFLATION
+    # Custom rates (when growth_type = "custom")
+    property_tax_custom_rate: float = 0.03
+    insurance_custom_rate: float = 0.04
+    hoa_custom_rate: float = 0.03
+    maintenance_custom_rate: float = 0.03
+    utilities_custom_rate: float = 0.03
 
     # === Income & Growth (from IncomeGrowthTab) ===
     appreciation_rate: float = 0.03
@@ -242,3 +266,22 @@ class DataModel:
     def is_existing_property(self) -> bool:
         """True if analyzing an existing property."""
         return self.analysis_mode == "Existing Property"
+
+    @property
+    def cost_growth_config(self) -> CostGrowthConfig:
+        """Build CostGrowthConfig from current DataModel settings."""
+        return CostGrowthConfig(
+            general_inflation_rate=self.general_inflation_rate,
+            insurance_premium_above_inflation=self.insurance_premium_above_inflation,
+            property_tax_growth_type=self.property_tax_growth_type,
+            insurance_growth_type=self.insurance_growth_type,
+            hoa_growth_type=self.hoa_growth_type,
+            pmi_growth_type=COST_GROWTH_TYPE_FIXED,  # PMI never inflates
+            maintenance_growth_type=self.maintenance_growth_type,
+            utilities_growth_type=self.utilities_growth_type,
+            property_tax_custom_rate=self.property_tax_custom_rate,
+            insurance_custom_rate=self.insurance_custom_rate,
+            hoa_custom_rate=self.hoa_custom_rate,
+            maintenance_custom_rate=self.maintenance_custom_rate,
+            utilities_custom_rate=self.utilities_custom_rate,
+        )

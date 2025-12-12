@@ -364,6 +364,79 @@ def _format_currency(value: float) -> str:
     return f"${value:,.0f}"
 
 
+def _generate_cost_growth_rows(inv, holding_years: int) -> str:
+    """Generate HTML table rows for cost growth analysis.
+
+    Shows year 1 vs final year costs with growth type for each category.
+    """
+    if inv is None or not inv.yearly_projections:
+        return "<tr><td colspan='5'>No cost data available</td></tr>"
+
+    year1 = inv.yearly_projections[0]
+    final_year = inv.yearly_projections[-1]
+
+    if year1.cost_detail is None or final_year.cost_detail is None:
+        return "<tr><td colspan='5'>Detailed cost breakdown not available</td></tr>"
+
+    config = inv.params.cost_growth_config
+
+    # Map growth types to display names
+    type_display = {
+        "appreciation": "Appreciation",
+        "inflation": "Inflation",
+        "inflation_plus": f"Inflation+{config.insurance_premium_above_inflation*100:.0f}%",
+        "fixed": "Fixed",
+        "custom": "Custom",
+    }
+
+    def get_growth_display(growth_type: str) -> str:
+        return type_display.get(growth_type, growth_type)
+
+    def calc_growth_pct(year1_val: float, final_val: float) -> str:
+        if year1_val <= 0:
+            return "-"
+        total_growth = (final_val / year1_val - 1) * 100
+        return f"+{total_growth:.0f}%"
+
+    rows = []
+
+    categories = [
+        ("Property Tax", year1.cost_detail.property_tax, final_year.cost_detail.property_tax, config.property_tax_growth_type),
+        ("Insurance", year1.cost_detail.insurance, final_year.cost_detail.insurance, config.insurance_growth_type),
+        ("HOA", year1.cost_detail.hoa, final_year.cost_detail.hoa, config.hoa_growth_type),
+        ("Maintenance", year1.cost_detail.maintenance, final_year.cost_detail.maintenance, config.maintenance_growth_type),
+        ("Utilities", year1.cost_detail.utilities, final_year.cost_detail.utilities, config.utilities_growth_type),
+        ("PMI", year1.cost_detail.pmi, final_year.cost_detail.pmi, "fixed"),
+    ]
+
+    for name, y1_val, final_val, growth_type in categories:
+        if y1_val > 0 or final_val > 0:  # Only show if there are costs
+            rows.append(f"""
+                <tr>
+                    <td>{name}</td>
+                    <td>{get_growth_display(growth_type)}</td>
+                    <td class="text-right">{_format_currency(y1_val)}</td>
+                    <td class="text-right">{_format_currency(final_val)}</td>
+                    <td class="text-right">{calc_growth_pct(y1_val, final_val)}</td>
+                </tr>
+            """)
+
+    # Add total row
+    y1_total = year1.operating_costs
+    final_total = final_year.operating_costs
+    rows.append(f"""
+        <tr class="highlight">
+            <td><strong>Total Operating Costs</strong></td>
+            <td></td>
+            <td class="text-right"><strong>{_format_currency(y1_total)}</strong></td>
+            <td class="text-right"><strong>{_format_currency(final_total)}</strong></td>
+            <td class="text-right"><strong>{calc_growth_pct(y1_total, final_total)}</strong></td>
+        </tr>
+    """)
+
+    return "\n".join(rows)
+
+
 # =============================================================================
 # New Purchase Report
 # =============================================================================
@@ -883,8 +956,8 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                         <td class="text-right">{data.management_rate * 100:.1f}%</td>
                     </tr>
                     <tr>
-                        <td>Cost Inflation</td>
-                        <td class="text-right">{(inv.params.cost_inflation_rate if inv else 0.03) * 100:.1f}% / year</td>
+                        <td>General Cost Inflation</td>
+                        <td class="text-right">{(inv.params.cost_growth_config.general_inflation_rate if inv else 0.03) * 100:.1f}% / year</td>
                         <td>Holding Period</td>
                         <td class="text-right">{data.holding_years} years</td>
                     </tr>
@@ -910,6 +983,30 @@ def _generate_new_purchase_report(data: ReportData) -> str:
                     </tr>
                 </table>
             </div>
+        </div>
+
+        <!-- Cost Growth Analysis -->
+        <div class="section">
+            <h2>Cost Growth Analysis</h2>
+            <p style="color: var(--gray-600); margin-bottom: 1rem; font-size: 0.9rem;">
+                Different cost categories grow at different rates based on their economic drivers
+            </p>
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <th>Category</th>
+                        <th>Growth Type</th>
+                        <th class="text-right">Year 1</th>
+                        <th class="text-right">Year {data.holding_years}</th>
+                        <th class="text-right">Growth</th>
+                    </tr>
+                    {_generate_cost_growth_rows(inv, data.holding_years)}
+                </table>
+            </div>
+            <p style="color: var(--gray-500); font-size: 0.8rem; margin-top: 0.75rem; font-style: italic;">
+                Property Tax and Maintenance grow with property appreciation. Insurance typically grows faster than inflation.
+                PMI is fixed until removed (when LTV reaches 80%).
+            </p>
         </div>
 
         <!-- Cash Flow Note -->

@@ -12,6 +12,111 @@ from .plot_common import (
 )
 
 
+def plot_operating_costs_over_time(investment_summary, ax=None):
+    """
+    Stacked area chart showing detailed operating cost breakdown over the holding period.
+
+    Uses the detailed cost_detail from each yearly projection to show how
+    each cost category grows over time with different growth rates.
+
+    Args:
+        investment_summary: InvestmentSummary object with yearly projections
+        ax: Optional matplotlib axis
+
+    Returns:
+        matplotlib Figure
+    """
+    if ax is None:
+        fig = create_figure(figsize=(12, 6))
+        ax = fig.add_subplot(111)
+    else:
+        fig = ax.get_figure()
+
+    projections = investment_summary.yearly_projections
+    years = [p.year for p in projections]
+
+    # Extract cost breakdowns - handle cases where cost_detail might be None
+    property_tax = []
+    insurance = []
+    hoa = []
+    pmi = []
+    maintenance = []
+    utilities = []
+
+    for p in projections:
+        if p.cost_detail:
+            property_tax.append(p.cost_detail.property_tax)
+            insurance.append(p.cost_detail.insurance)
+            hoa.append(p.cost_detail.hoa)
+            pmi.append(p.cost_detail.pmi)
+            maintenance.append(p.cost_detail.maintenance)
+            utilities.append(p.cost_detail.utilities)
+        else:
+            # Fallback if no cost_detail
+            property_tax.append(0)
+            insurance.append(0)
+            hoa.append(0)
+            pmi.append(0)
+            maintenance.append(0)
+            utilities.append(0)
+
+    # Build stack data - only include categories with values
+    stack_data = []
+    labels = []
+    colors = []
+
+    category_info = [
+        (property_tax, "Property Tax", COLORS["accent"]),
+        (insurance, "Insurance", COLORS["warning"]),
+        (hoa, "HOA", COLORS["secondary"]),
+        (pmi, "PMI", COLORS["neutral"]),
+        (maintenance, "Maintenance", COLORS["primary"]),
+        (utilities, "Utilities", COLORS["cash_flow"]),
+    ]
+
+    for data, label, color in category_info:
+        if sum(data) > 0:
+            stack_data.append(data)
+            labels.append(label)
+            colors.append(color)
+
+    if stack_data:
+        ax.stackplot(years, *stack_data, labels=labels, colors=colors, alpha=0.8)
+
+        # Add total line
+        totals = [sum(vals) for vals in zip(*stack_data)]
+        ax.plot(years, totals, color="white", linewidth=2, linestyle="--", alpha=0.7, label="Total")
+
+        # Annotate first and last year totals
+        ax.annotate(
+            f"${totals[0]:,.0f}",
+            xy=(years[0], totals[0]),
+            xytext=(years[0], totals[0] * 1.1),
+            ha="center",
+            color="white",
+            fontsize=9,
+            fontweight="bold",
+        )
+        ax.annotate(
+            f"${totals[-1]:,.0f}",
+            xy=(years[-1], totals[-1]),
+            xytext=(years[-1], totals[-1] * 1.05),
+            ha="center",
+            color="white",
+            fontsize=9,
+            fontweight="bold",
+        )
+
+    style_axis(ax, "Operating Costs Over Time", "Year", "Annual Cost ($)")
+    ax.legend(loc="upper left", facecolor=COLORS["dark_bg"], labelcolor="white", fontsize=8)
+    ax.yaxis.set_major_formatter(CURRENCY_FORMATTER)
+
+    # Set integer ticks for years
+    ax.set_xticks(years)
+
+    return fig
+
+
 def plot_costs_by_category(schedule: RecurringCostSchedule, ax=None):
     """
     Stacked area chart showing cost breakdown by category over time.

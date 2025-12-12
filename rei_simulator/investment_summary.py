@@ -10,7 +10,7 @@ Provides:
 - Sensitivity analysis
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from typing import Optional
@@ -24,6 +24,11 @@ from .formulas import calculate_periodic_payment
 from .metrics import calculate_irr
 from .comparison import generate_alternative_comparison
 from .tax import calculate_sale_tax as _calculate_sale_tax, SaleTaxEstimate
+from .cost_growth import (
+    CostGrowthConfig,
+    YearlyCostBreakdown,
+    calculate_yearly_costs,
+)
 
 
 @dataclass
@@ -63,7 +68,9 @@ class InvestmentParameters:
     selling_cost_percent: float = 0.06  # Agent commission + closing
     initial_reserves: float = 0.0  # Emergency fund at purchase
     alternative_return_rate: float = 0.10  # S&P 500 nominal return (before inflation)
-    cost_inflation_rate: float = 0.03  # Annual inflation for operating costs
+
+    # Cost growth configuration (replaces single cost_inflation_rate)
+    cost_growth_config: CostGrowthConfig = field(default_factory=CostGrowthConfig)
 
     # Renovation/Rehab parameters
     renovation_enabled: bool = False
@@ -122,6 +129,33 @@ class InvestmentParameters:
             return 0.0
         return self.building_value_for_depreciation / DEPRECIATION_YEARS_RESIDENTIAL
 
+    @property
+    def base_costs(self) -> dict[str, float]:
+        """Base (year 1) costs by category for cost growth calculations."""
+        return {
+            "property_tax": self.property_taxes_annual,
+            "insurance": self.insurance_annual,
+            "hoa": self.hoa_annual,
+            "pmi": self.pmi_annual,
+            "maintenance": self.maintenance_annual,
+            "utilities": self.utilities_annual,
+        }
+
+
+@dataclass
+class YearlyCostDetail:
+    """Detailed cost breakdown for a single year (for transparency)."""
+    property_tax: float
+    insurance: float
+    hoa: float
+    pmi: float
+    maintenance: float
+    utilities: float
+
+    @property
+    def total(self) -> float:
+        return self.property_tax + self.insurance + self.hoa + self.pmi + self.maintenance + self.utilities
+
 
 @dataclass
 class YearlyProjection:
@@ -141,7 +175,7 @@ class YearlyProjection:
     # Expenses
     mortgage_payment: float
     interest_paid: float  # For tax benefit calculation
-    operating_costs: float
+    operating_costs: float  # Total operating costs for the year
     total_expenses: float
 
     # Tax benefits
@@ -164,6 +198,9 @@ class YearlyProjection:
     selling_costs: float
     net_sale_proceeds: float
     total_profit: float
+
+    # Optional detailed breakdown (set after required fields)
+    cost_detail: Optional[YearlyCostDetail] = None  # Detailed cost breakdown for transparency
 
 
 @dataclass
@@ -361,9 +398,30 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
             management_cost = 0
             net_rental_income = 0
 
-        # Operating costs with inflation (consistent with asset_building.py)
-        cost_inflation = (1 + params.cost_inflation_rate) ** (year - 1)
-        operating_costs = params.annual_operating_costs * cost_inflation
+        # Operating costs with per-category growth rates
+        # Determine if PMI is still required (LTV > 80%)
+        current_ltv = loan_balance / property_value if property_value > 0 else 0
+        pmi_still_required = current_ltv > 0.80
+
+        # Calculate costs for each category with appropriate growth rates
+        cost_breakdown = calculate_yearly_costs(
+            base_costs=params.base_costs,
+            cost_growth_config=params.cost_growth_config,
+            appreciation_rate=params.appreciation_rate,
+            year=year,
+            pmi_still_required=pmi_still_required,
+        )
+        operating_costs = cost_breakdown.total
+
+        # Create detailed cost breakdown for transparency
+        cost_detail = YearlyCostDetail(
+            property_tax=cost_breakdown.property_tax,
+            insurance=cost_breakdown.insurance,
+            hoa=cost_breakdown.hoa,
+            pmi=cost_breakdown.pmi,
+            maintenance=cost_breakdown.maintenance,
+            utilities=cost_breakdown.utilities,
+        )
 
         # Total expenses (management_cost already subtracted in net_rental_income)
         total_expenses = mortgage_payment + operating_costs
@@ -434,6 +492,7 @@ def generate_investment_summary(params: InvestmentParameters) -> InvestmentSumma
             mortgage_payment=mortgage_payment,
             interest_paid=interest_paid,
             operating_costs=operating_costs,
+            cost_detail=cost_detail,
             total_expenses=total_expenses,
             interest_deduction=interest_deduction,
             depreciation_benefit=depreciation_benefit,

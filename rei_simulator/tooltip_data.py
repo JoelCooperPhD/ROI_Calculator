@@ -267,6 +267,89 @@ TOOLTIPS = {
             "• Set to $0 if tenant pays"
         ),
     },
+    "general_inflation_rate": {
+        "title": "General Inflation Rate",
+        "text": (
+            "Base inflation rate for operating cost growth.\n\n"
+            "• 3% is the long-term average\n"
+            "• Used as default for utilities, HOA, etc.\n"
+            "• Some costs may grow faster (see Advanced settings)\n\n"
+            "Note: This does NOT affect property value growth - "
+            "that uses the Appreciation Rate on the Income tab."
+        ),
+    },
+    "advanced_cost_growth": {
+        "title": "Advanced Cost Growth Settings",
+        "text": (
+            "Fine-tune how each cost category grows over time.\n\n"
+            "Different costs have different drivers:\n"
+            "• Property Tax: Tied to assessed value (appreciation)\n"
+            "• Insurance: Often rises faster than inflation\n"
+            "• HOA: Usually matches inflation\n"
+            "• Maintenance: Scales with property value\n"
+            "• Utilities: Typically matches inflation\n"
+            "• PMI: Fixed - does not inflate (until removed)\n\n"
+            "Smart defaults are economically sensible, but you "
+            "can override any category."
+        ),
+    },
+    "property_tax_growth": {
+        "title": "Property Tax Growth",
+        "text": (
+            "How property taxes grow each year.\n\n"
+            "• Match Appreciation: Taxes follow property value\n"
+            "  (Standard in most states)\n"
+            "• Match Inflation: Fixed assessment growth\n"
+            "  (Similar to Prop 13 states like CA)\n"
+            "• Custom: Specify your own growth rate\n\n"
+            "Property taxes are typically reassessed periodically "
+            "based on market value."
+        ),
+    },
+    "insurance_growth": {
+        "title": "Insurance Growth",
+        "text": (
+            "How homeowners insurance grows each year.\n\n"
+            "• Inflation + 1%: Accounts for rising rebuild costs\n"
+            "  and climate risk (Recommended)\n"
+            "• Match Inflation: Conservative estimate\n"
+            "• Custom: Specify your own rate\n\n"
+            "Insurance has been rising faster than inflation "
+            "in many areas due to climate events."
+        ),
+    },
+    "hoa_growth": {
+        "title": "HOA Growth",
+        "text": (
+            "How HOA fees grow each year.\n\n"
+            "• Match Inflation: Typical for well-managed HOAs\n"
+            "• Match Appreciation: For HOAs with high reserves\n"
+            "• Custom: For specific situations\n\n"
+            "HOA fees can be volatile - check the HOA's financial "
+            "health and reserve fund."
+        ),
+    },
+    "maintenance_growth": {
+        "title": "Maintenance Growth",
+        "text": (
+            "How maintenance costs grow each year.\n\n"
+            "• Match Appreciation: Repair costs scale with home value\n"
+            "  (More expensive homes cost more to maintain)\n"
+            "• Match Inflation: Basic cost growth\n"
+            "• Custom: For specific situations\n\n"
+            "Labor and materials costs tend to rise with home values."
+        ),
+    },
+    "utilities_growth": {
+        "title": "Utilities Growth",
+        "text": (
+            "How utility costs grow each year.\n\n"
+            "• Match Inflation: Standard for most utilities\n"
+            "• Match Appreciation: For areas with rapid growth\n"
+            "• Custom: If you have specific data\n\n"
+            "Utilities generally track CPI but can vary by region."
+        ),
+    },
     "costs_chart_options": {
         "title": "Chart Options",
         "text": (

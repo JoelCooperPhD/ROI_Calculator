@@ -55,6 +55,20 @@ DEFAULT_RENT_GROWTH_RATE = 0.03  # 3%
 # Default inflation rate for operating cost escalation
 DEFAULT_COST_INFLATION_RATE = 0.03  # 3%
 
+# Default insurance premium above inflation (insurance costs rising faster than CPI)
+DEFAULT_INSURANCE_PREMIUM_ABOVE_INFLATION = 0.01  # 1% above inflation
+
+# =============================================================================
+# COST GROWTH TYPE CONSTANTS
+# =============================================================================
+
+# Cost growth types for each category
+COST_GROWTH_TYPE_APPRECIATION = "appreciation"  # Grows with property value
+COST_GROWTH_TYPE_INFLATION = "inflation"  # Grows with general inflation
+COST_GROWTH_TYPE_INFLATION_PLUS = "inflation_plus"  # Inflation + premium
+COST_GROWTH_TYPE_FIXED = "fixed"  # No growth (0%)
+COST_GROWTH_TYPE_CUSTOM = "custom"  # User-specified rate
+
 # Default S&P 500 nominal return rate for alternative investment comparison
 # Historical average is ~10% nominal, ~7% real (after inflation)
 DEFAULT_ALTERNATIVE_RETURN_RATE = 0.10  # 10%
